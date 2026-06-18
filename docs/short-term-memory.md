@@ -1,43 +1,53 @@
 # Short-Term Memory Architecture
 
-Short-term memory stores the conversation state for one active thread.
+This module implements short-term conversation memory: the thread-scoped state required to continue a conversation across turns.
 
-It answers one question:
-
-```text
-What has happened in this conversation so far?
-```
-
-In this project, short-term memory is built around four concepts:
+The design goal is intentionally narrow:
 
 ```text
-Message
-ConversationState
-ConversationMemory
-ConversationStorage
+Persist the ordered conversation timeline for a thread,
+without coupling the conversation API to a specific storage backend.
 ```
 
-## Thread
+This is not a LangGraph checkpointer and it is not long-term semantic memory. It is the conversation-history layer that higher-level agent, summary, and long-term memory systems can build on.
 
-A thread is one conversation.
+## Core Model
 
-The `thread_id` identifies that conversation.
+Short-term memory is modeled with three layers:
 
-Example:
+```text
+Data model      -> Message, ConversationState
+Application API -> ConversationMemory
+Storage contract -> ConversationStorage
+```
+
+The separation matters:
+
+```text
+Message and ConversationState define what is stored.
+ConversationMemory defines how application code interacts with memory.
+ConversationStorage defines where and how memory is persisted.
+```
+
+## Thread Identity
+
+A `thread_id` identifies one conversation timeline.
+
+Examples:
 
 ```text
 thread-rag
 thread-memory
-thread-support-case-123
+support-case-123
 ```
 
-If the same `thread_id` is used again, the system continues the same conversation.
+Using the same `thread_id` continues the same conversation. Using a different `thread_id` starts or reads a different conversation.
 
-If a new `thread_id` is used, the system starts a different conversation.
+This is the same architectural role as a conversation ID in many LLM systems: it scopes short-term state without implying that everything in the thread should become long-term memory.
 
 ## Message
 
-A `Message` is one item said by the user, assistant, system, or tool.
+`Message` represents a single conversational message.
 
 Defined in:
 
@@ -45,7 +55,7 @@ Defined in:
 src/llm_memory/conversation/state.py
 ```
 
-Fields:
+Current fields:
 
 ```text
 id
@@ -76,17 +86,20 @@ Message(
 )
 ```
 
-`run_id` connects a message to the model/application execution that produced it.
+The additional fields make the message useful beyond simple chat replay:
 
-`model_name` records which model produced the message.
+```text
+run_id      -> correlates a message with the model/application execution that produced it
+model_name  -> records which model produced the response
+usage       -> stores token or usage accounting
+metadata    -> stores provider-specific or application-specific details
+```
 
-`usage` records token counts or similar usage data.
-
-`metadata` stores extra structured information.
+This mirrors what production LLM systems usually need for tracing, debugging, evaluation, cost analysis, and provider comparison.
 
 ## ConversationState
 
-`ConversationState` is the current state of one conversation thread.
+`ConversationState` is the in-memory representation of one thread.
 
 Defined in:
 
@@ -113,15 +126,11 @@ ConversationState(
 )
 ```
 
-`ConversationState` is the data shape.
-
-It does not decide where data is saved.
-
-It does not perform storage operations.
+`ConversationState` is deliberately passive. It does not know about files, databases, caches, or storage policies. It is just the state shape.
 
 ## ConversationMemory
 
-`ConversationMemory` is the public API for short-term memory.
+`ConversationMemory` is the application-facing API.
 
 Defined in:
 
@@ -129,7 +138,7 @@ Defined in:
 src/llm_memory/conversation/conversation.py
 ```
 
-It provides methods such as:
+It exposes:
 
 ```text
 add_message
@@ -148,13 +157,13 @@ memory.add_message(
 )
 ```
 
-`ConversationMemory` creates `Message` objects and sends them to the storage layer.
+`ConversationMemory` creates `Message` objects and delegates persistence to the configured storage backend.
 
-It does not know whether the data is stored in memory, JSON, Markdown, SQLite, or another backend.
+It does not know whether the backend is in-memory, JSON, Markdown, SQLite, cached, or remote. That keeps application code stable while storage choices evolve.
 
-## ConversationStorage
+## Storage Contract
 
-`ConversationStorage` defines the persistence contract.
+`ConversationStorage` defines the interface every backend must implement.
 
 Defined in:
 
@@ -162,7 +171,7 @@ Defined in:
 src/llm_memory/storage/interface.py
 ```
 
-Every storage backend implements:
+The contract is append-first:
 
 ```text
 get
@@ -172,11 +181,46 @@ replace_messages
 delete
 ```
 
-This allows different storage backends to be swapped without changing `ConversationMemory`.
+The most important method is:
+
+```text
+append_message
+```
+
+Normal chat writes should append a single message. They should not rewrite the entire conversation on every turn.
+
+`replace_messages` exists, but it is reserved for intentional state rewrites such as trimming, compaction, summarization, or manual correction.
+
+## Persistence Point
+
+Short-term memory is persisted when a meaningful conversation event happens.
+
+For a normal turn:
+
+```text
+1. User message is received
+2. Append user message
+3. Model produces assistant response
+4. Append assistant message
+```
+
+In this codebase, that persistence point is:
+
+```python
+ConversationMemory.add_message(...)
+```
+
+Internally, it calls:
+
+```python
+self._storage.append_message(...)
+```
+
+This gives the system crash-friendly behavior: if the model call fails after the user message is received, the user message can still be preserved.
 
 ## Storage Backends
 
-The project currently has these storage implementations:
+The current storage implementations are:
 
 ```text
 MemoryStorage
@@ -185,6 +229,8 @@ MarkdownStorage
 SQLiteStorage
 CachedConversationStorage
 ```
+
+Each backend implements the same `ConversationStorage` contract.
 
 ### MemoryStorage
 
@@ -196,16 +242,7 @@ src/llm_memory/storage/memory.py
 
 Stores conversation state in Python memory.
 
-This is fast, but not persistent. When the Python process exits, the data is gone.
-
-Useful for:
-
-```text
-temporary runtime state
-small examples
-tests
-local experiments
-```
+This backend is fast and useful for runtime caching, examples, and tests. It is not persistent across process restarts.
 
 ### JsonStorage
 
@@ -217,13 +254,7 @@ src/llm_memory/storage/json.py
 
 Stores conversation state in a JSON file.
 
-Useful for:
-
-```text
-structured local persistence
-inspection
-small applications
-```
+This backend is useful for local structured persistence and inspection. It is simple and transparent, but not designed for high-concurrency workloads.
 
 ### MarkdownStorage
 
@@ -233,9 +264,9 @@ Defined in:
 src/llm_memory/storage/markdown.py
 ```
 
-Stores conversation state as Markdown files.
+Stores conversation state as Markdown.
 
-Useful when humans or LLMs should be able to read the stored conversation easily.
+This backend optimizes for readability. It is useful when conversation traces should be easy for humans or LLMs to inspect directly.
 
 ### SQLiteStorage
 
@@ -245,9 +276,7 @@ Defined in:
 src/llm_memory/storage/sqlite.py
 ```
 
-Stores conversation state in SQLite.
-
-SQLite uses two tables:
+Stores conversation state in SQLite using a normalized schema:
 
 ```text
 conversations
@@ -258,7 +287,7 @@ conversation_items
 
 `conversation_items` stores ordered items inside the conversation.
 
-Currently, `ConversationMemory` writes message items. The schema also allows future item types:
+The item table currently supports these item types:
 
 ```text
 message
@@ -268,6 +297,8 @@ retrieval
 summary
 ```
 
+The Python API currently writes message items. The schema is intentionally broader because modern LLM conversations are not only user and assistant messages; they also include tool calls, tool outputs, retrieved context, summaries, and execution metadata.
+
 ### CachedConversationStorage
 
 Defined in:
@@ -276,14 +307,7 @@ Defined in:
 src/llm_memory/storage/cached.py
 ```
 
-Combines two storage backends:
-
-```text
-cache
-primary
-```
-
-Example:
+Combines a fast cache backend with a primary backend:
 
 ```python
 storage = CachedConversationStorage(
@@ -292,141 +316,173 @@ storage = CachedConversationStorage(
 )
 ```
 
-Read behavior:
+Read path:
 
 ```text
-1. Try cache
-2. If cache has the thread, return it
-3. If cache misses, read from primary
-4. Store the result in cache
-5. Return the result
+1. Read from cache
+2. If present, return cached state
+3. If missing, read from primary
+4. Populate cache
+5. Return state
 ```
 
-Write behavior:
+Write path:
 
 ```text
 1. Write to primary
 2. Update cache
 ```
 
-This keeps `MemoryStorage` useful as a fast runtime cache while keeping SQLite as the primary storage backend.
+The primary backend remains the source of truth. The cache is an optimization layer.
 
-## Persistence Point
+This is intentionally similar to common cache-aside/write-through patterns used in application storage systems.
 
-Short-term memory is persisted when a meaningful conversation event happens.
+## SQLite Schema
 
-For normal chat:
+SQLite stores conversation memory as a conversation plus ordered items.
 
-```text
-user message arrives
-append user message
-
-assistant message is produced
-append assistant message
-```
-
-In code, the persistence point is:
-
-```python
-ConversationMemory.add_message(...)
-```
-
-That method creates a `Message` and calls:
-
-```python
-self._storage.append_message(...)
-```
-
-The normal path is append-first.
-
-The system does not rewrite the whole conversation for every new message.
-
-## Replace Messages
-
-`replace_messages` exists for intentional changes to a conversation.
-
-Examples:
+Conceptual schema:
 
 ```text
-trimming old messages
-compacting history
-replacing raw messages with summary + recent messages
-manual correction
+conversations
+  id
+  created_at
+  updated_at
+  metadata
+
+conversation_items
+  id
+  conversation_id
+  item_type
+  position
+  role
+  content
+  created_at
+  run_id
+  model_name
+  usage
+  metadata
 ```
 
-It should not be the normal path for every chat turn.
+The `position` column preserves conversational order.
 
-## Architecture
+The `conversation_id` foreign key connects each item to its parent conversation.
 
-Direct storage:
+`run_id`, `model_name`, `usage`, and `metadata` support tracing and observability.
+
+## Message History Processing
+
+Conversation storage is not the same thing as prompt construction.
+
+The storage layer can keep the full short-term timeline, while processors decide what subset should be sent to a model.
+
+Defined in:
 
 ```text
-ConversationMemory
-  -> SQLiteStorage
+src/llm_memory/conversation/processors.py
 ```
 
-Cached storage:
+Current processors include:
 
 ```text
-ConversationMemory
-  -> CachedConversationStorage
-       -> MemoryStorage
-       -> SQLiteStorage
+KeepRecentMessagesProcessor
+FilterByRoleProcessor
+ProcessorPipeline
 ```
 
-The important boundary:
-
-```text
-ConversationMemory manages the API.
-ConversationStorage manages persistence.
-Message and ConversationState define the data.
-```
+This separation is important because model context should be selected intentionally. Persisting every message does not mean every message must be sent back to the model on every turn.
 
 ## Relationship To LangGraph
 
 This project does not implement LangGraph checkpoints.
 
-The current short-term memory system is closer to conversation history storage:
+LangGraph checkpointers persist graph execution state. That state can include messages, but it can also include routing decisions, tool outputs, intermediate node state, retries, and other graph-level data.
+
+This project implements a lower-level conversation memory layer:
 
 ```text
-thread_id -> messages
+thread_id -> ordered conversation items
 ```
 
-LangGraph checkpointers store full graph state.
-
-This project focuses first on storing conversation memory explicitly and append-first.
-
-The concepts still map cleanly:
+The concepts are compatible:
 
 ```text
 thread_id
-conversation state
+state
 messages
 storage backend
 ```
 
-## Current Status
+But the scope is different:
+
+```text
+ConversationMemory -> conversation history
+LangGraph checkpointer -> graph execution state
+Long-term memory store -> durable knowledge across threads
+```
+
+Keeping those boundaries separate makes the system easier to extend.
+
+## Design Decisions
+
+### Append-first writes
+
+Normal conversation events are appended one at a time.
+
+This avoids rewriting the full thread for every new message and keeps the persistence model aligned with how conversations actually happen.
+
+### Storage interface before storage choice
+
+`ConversationMemory` depends on the `ConversationStorage` protocol, not on SQLite, JSON, or Markdown directly.
+
+That makes it possible to move from local storage to Postgres, Redis, or another backend without rewriting the application API.
+
+### Cache as a wrapper
+
+Caching is implemented as `CachedConversationStorage`, not embedded into `ConversationMemory`.
+
+That keeps caching optional and composable.
+
+### Message metadata is first-class
+
+Model name, run ID, usage, and metadata are part of the message model because production LLM systems need traceability.
+
+Without those fields, it becomes difficult to debug which model produced a message, compare model behavior, analyze cost, or evaluate runs.
+
+## Current Capabilities
 
 Short-term memory currently supports:
 
 ```text
-thread-based conversations
+thread-scoped conversations
 append-first message persistence
-multiple storage backends
-cached storage
-message metadata
-model/run tracking
+multiple interchangeable storage backends
+cache + primary storage composition
+message metadata and usage tracking
 message history processors
+SQLite conversation item schema
 ```
 
-Future additions can build on top of this:
+## Next Extensions
+
+The schema already anticipates richer conversation items.
+
+Natural next steps:
 
 ```text
-tool call items
-tool result items
-retrieval items
-summary items
+add_tool_call
+add_tool_result
+add_retrieval
+add_summary
 windowed reads
 summary memory
 long-term semantic memory
+```
+
+These should build on the existing boundary:
+
+```text
+ConversationMemory for API
+ConversationStorage for persistence
+Message/ConversationState for data shape
 ```
