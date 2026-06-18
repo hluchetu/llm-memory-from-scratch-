@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from llm_memory.conversation.state import ConversationState
-from llm_memory.conversation.state import Message
-from llm_memory.conversation.state import MessageRole
+from llm_memory.context.conversation.state import ConversationItem
+from llm_memory.context.conversation.state import ConversationState
+from llm_memory.context.conversation.state import Message
+from llm_memory.context.conversation.state import MessageRole
+from llm_memory.context.conversation.state import SummaryItem
 from llm_memory.storage.interface import ConversationStorage
 from llm_memory.storage.memory import MemoryStorage
 
@@ -45,6 +47,31 @@ class ConversationMemory:
         )
 
         return message
+
+    def add_summary(
+        self,
+        thread_id: str,
+        content: str,
+        covered_item_ids: list[str],
+        metadata: dict[str, object] | None = None,
+    ) -> SummaryItem:
+        summary = SummaryItem(
+            content=content,
+            covered_item_ids=covered_item_ids,
+            metadata=metadata or {},
+        )
+
+        self._storage.append_item(
+            thread_id=thread_id,
+            item=summary,
+        )
+
+        return summary
+
+    def get_items(self, thread_id: str) -> list[ConversationItem]:
+        state = self.get_thread(thread_id)
+
+        return list(state.items)
 
     def get_messages(self, thread_id: str) -> list[Message]:
         state = self.get_thread(thread_id)

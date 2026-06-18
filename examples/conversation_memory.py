@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from llm_memory.conversation.conversation import ConversationMemory
-from llm_memory.conversation.processors import FilterByRoleProcessor
-from llm_memory.conversation.processors import KeepRecentMessagesProcessor
-from llm_memory.conversation.processors import ProcessorPipeline
+from llm_memory.context.conversation.memory import ConversationMemory
+from llm_memory.context.conversation.processors import FilterByRoleProcessor
+from llm_memory.context.conversation.processors import KeepRecentMessagesProcessor
+from llm_memory.context.conversation.processors import ProcessorPipeline
 from llm_memory.storage.memory import MemoryStorage
 
 

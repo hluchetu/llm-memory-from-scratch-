@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm_memory.conversation.conversation import ConversationMemory
+from llm_memory.context.conversation.memory import ConversationMemory
 from llm_memory.storage.cached import CachedConversationStorage
 from llm_memory.storage.memory import MemoryStorage
 from llm_memory.storage.sqlite import SQLiteStorage

@@ -5,8 +5,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from llm_memory.conversation.state import ConversationState
-from llm_memory.conversation.state import Message
+from llm_memory.context.conversation.state import ConversationItem
+from llm_memory.context.conversation.state import ConversationState
+from llm_memory.context.conversation.state import Message
+from llm_memory.context.conversation.state import SummaryItem
 
 
 class JsonStorage:
@@ -41,21 +43,31 @@ class JsonStorage:
             self._write_data(data)
 
     def append_message(self, thread_id: str, message: Message) -> None:
+        self.append_item(thread_id, message)
+
+    def append_item(self, thread_id: str, item: ConversationItem) -> None:
         state = self.get(thread_id)
 
         if state is None:
             state = ConversationState(thread_id=thread_id)
 
-        state.messages.append(message)
+        state.items.append(item)
         self.save(state)
 
-    def replace_messages(self, thread_id: str, messages: list[Message]) -> None:
+    def replace_items(
+        self,
+        thread_id: str,
+        items: list[ConversationItem],
+    ) -> None:
         self.save(
             ConversationState(
                 thread_id=thread_id,
-                messages=messages,
+                items=items,
             )
         )
+
+    def replace_messages(self, thread_id: str, messages: list[Message]) -> None:
+        self.replace_items(thread_id, messages)
 
     def delete(self, thread_id: str) -> None:
         data = self._read_data()
@@ -79,35 +91,71 @@ class JsonStorage:
     def _serialize_state(self, state: ConversationState) -> dict[str, Any]:
         return {
             "thread_id": state.thread_id,
-            "messages": [
-                {
-                    "id": message.id,
-                    "role": message.role,
-                    "content": message.content,
-                    "created_at": message.created_at.isoformat(),
-                    "run_id": message.run_id,
-                    "model_name": message.model_name,
-                    "usage": message.usage,
-                    "metadata": message.metadata,
-                }
-                for message in state.messages
+            "items": [
+                self._serialize_item(item)
+                for item in state.items
             ],
         }
 
     def _deserialize_state(self, raw_state: dict[str, Any]) -> ConversationState:
         return ConversationState(
             thread_id=raw_state["thread_id"],
-            messages=[
-                Message(
-                    id=raw_message["id"],
-                    role=raw_message["role"],
-                    content=raw_message["content"],
-                    created_at=datetime.fromisoformat(raw_message["created_at"]),
-                    run_id=raw_message.get("run_id"),
-                    model_name=raw_message.get("model_name"),
-                    usage=raw_message.get("usage"),
-                    metadata=raw_message.get("metadata", {}),
-                )
-                for raw_message in raw_state["messages"]
+            items=[
+                self._deserialize_item(raw_item)
+                for raw_item in raw_state.get("items", raw_state.get("messages", []))
             ],
+        )
+
+    def _serialize_item(self, item: ConversationItem) -> dict[str, Any]:
+        if isinstance(item, Message):
+            return {
+                "item_type": "message",
+                "id": item.id,
+                "role": item.role,
+                "content": item.content,
+                "created_at": item.created_at.isoformat(),
+                "run_id": item.run_id,
+                "model_name": item.model_name,
+                "usage": item.usage,
+                "metadata": item.metadata,
+            }
+
+        if isinstance(item, SummaryItem):
+            return {
+                "item_type": "summary",
+                "id": item.id,
+                "content": item.content,
+                "created_at": item.created_at.isoformat(),
+                "covered_item_ids": item.covered_item_ids,
+                "metadata": item.metadata,
+            }
+
+        return {
+            "item_type": getattr(item, "item_type", "unknown"),
+            "id": item.id,
+            "created_at": item.created_at.isoformat(),
+            "metadata": item.metadata,
+        }
+
+    def _deserialize_item(self, raw_item: dict[str, Any]) -> ConversationItem:
+        item_type = raw_item.get("item_type", "message")
+
+        if item_type == "summary":
+            return SummaryItem(
+                id=raw_item["id"],
+                content=raw_item["content"],
+                created_at=datetime.fromisoformat(raw_item["created_at"]),
+                covered_item_ids=raw_item.get("covered_item_ids", []),
+                metadata=raw_item.get("metadata", {}),
+            )
+
+        return Message(
+            id=raw_item["id"],
+            role=raw_item["role"],
+            content=raw_item["content"],
+            created_at=datetime.fromisoformat(raw_item["created_at"]),
+            run_id=raw_item.get("run_id"),
+            model_name=raw_item.get("model_name"),
+            usage=raw_item.get("usage"),
+            metadata=raw_item.get("metadata", {}),
         )

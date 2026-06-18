@@ -29,6 +29,25 @@ ConversationMemory defines how application code interacts with memory.
 ConversationStorage defines where and how memory is persisted.
 ```
 
+```mermaid
+flowchart TB
+    App["Application / agent"] --> Memory["ConversationMemory"]
+    Memory --> State["ConversationState"]
+    State --> Items["ConversationItem timeline"]
+    Items --> Message["Message"]
+    Items --> Summary["SummaryItem"]
+    Memory --> Storage["ConversationStorage"]
+    Storage --> Backend["Memory / JSON / Markdown / SQLite / cached"]
+```
+
+Model-facing messages are kept separate from stored conversation items:
+
+```text
+conversation.state.Message -> internal persisted conversation message
+llm.message.Message        -> provider-neutral message sent to a chat model
+llm.adapters               -> conversion boundary
+```
+
 ## Thread Identity
 
 A `thread_id` identifies one conversation timeline.
@@ -52,7 +71,7 @@ This is the same architectural role as a conversation ID in many LLM systems: it
 Defined in:
 
 ```text
-src/llm_memory/conversation/state.py
+src/llm_memory/context/conversation/state.py
 ```
 
 Current fields:
@@ -104,14 +123,14 @@ This mirrors what production LLM systems usually need for tracing, debugging, ev
 Defined in:
 
 ```text
-src/llm_memory/conversation/state.py
+src/llm_memory/context/conversation/state.py
 ```
 
 It contains:
 
 ```text
 thread_id
-messages
+items
 ```
 
 Example:
@@ -119,7 +138,7 @@ Example:
 ```python
 ConversationState(
     thread_id="thread-rag",
-    messages=[
+    items=[
         Message(role="user", content="Explain reranking."),
         Message(role="assistant", content="Reranking sorts retrieved documents."),
     ],
@@ -128,6 +147,8 @@ ConversationState(
 
 `ConversationState` is deliberately passive. It does not know about files, databases, caches, or storage policies. It is just the state shape.
 
+The `messages` property is a filtered view over `items`. That leaves room for the same conversation timeline to hold tool calls, tool results, retrieval records, and summary records without pretending every context item is a chat message.
+
 ## ConversationMemory
 
 `ConversationMemory` is the application-facing API.
@@ -135,7 +156,7 @@ ConversationState(
 Defined in:
 
 ```text
-src/llm_memory/conversation/conversation.py
+src/llm_memory/context/conversation/memory.py
 ```
 
 It exposes:
@@ -202,6 +223,21 @@ For a normal turn:
 2. Append user message
 3. Model produces assistant response
 4. Append assistant message
+```
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Memory as ConversationMemory
+    participant Storage as ConversationStorage
+    participant Model as ChatModel
+
+    App->>Memory: add_message(user)
+    Memory->>Storage: append_message(user)
+    App->>Model: invoke(model context)
+    Model-->>App: AIMessage
+    App->>Memory: add_message(assistant)
+    Memory->>Storage: append_message(assistant)
 ```
 
 In this codebase, that persistence point is:
@@ -379,7 +415,7 @@ The storage layer can keep the full short-term timeline, while processors decide
 Defined in:
 
 ```text
-src/llm_memory/conversation/processors.py
+src/llm_memory/context/conversation/processors.py
 ```
 
 Current processors include:
@@ -387,10 +423,157 @@ Current processors include:
 ```text
 KeepRecentMessagesProcessor
 FilterByRoleProcessor
+SummarizeOldMessagesProcessor
 ProcessorPipeline
 ```
 
 This separation is important because model context should be selected intentionally. Persisting every message does not mean every message must be sent back to the model on every turn.
+
+### Conversation Summary Processing
+
+`SummarizeOldMessagesProcessor` compresses older messages before model invocation.
+
+It does not delete the stored conversation. It only prepares a smaller model context:
+
+```text
+summary of older messages
++
+recent raw messages
+```
+
+```mermaid
+flowchart LR
+    Stored["Stored raw messages"] --> Processor["SummarizeOldMessagesProcessor"]
+    Processor --> Old["Older messages"]
+    Processor --> Recent["Recent raw messages"]
+    Old --> SummaryModel["Summary ChatModel"]
+    SummaryModel --> Summary["System summary message"]
+    Summary --> Context["Model context"]
+    Recent --> Context
+```
+
+The summary prompt is stored separately from code:
+
+```text
+src/llm_memory/prompts/conversation_summary.yaml
+```
+
+The processor loads the prompt through:
+
+```text
+src/llm_memory/prompts/loader.py
+```
+
+This follows the same pattern as the agentic RAG repo: prompts are versioned text assets, while processors contain orchestration logic.
+
+The summary message includes metadata:
+
+```text
+kind = conversation_summary
+covered_item_ids = ids of items summarized
+```
+
+That metadata makes it possible to trace which original messages were compressed into the summary.
+
+## Persisted Summaries
+
+Summaries can also be saved back into the conversation timeline as `SummaryItem`.
+
+This does not make the summary the source of truth. The source of truth remains the raw conversation messages.
+
+The stored timeline can contain both:
+
+```text
+Message
+Message
+Message
+SummaryItem
+Message
+Message
+```
+
+```mermaid
+flowchart TB
+    Timeline["Conversation timeline"] --> M1["Message"]
+    Timeline --> M2["Message"]
+    Timeline --> M3["Message"]
+    Timeline --> S1["SummaryItem"]
+    Timeline --> M4["Message"]
+    Timeline --> M5["Message"]
+
+    S1 -. covers .-> M1
+    S1 -. covers .-> M2
+    S1 -. covers .-> M3
+```
+
+This gives the system two useful views:
+
+```text
+raw messages       -> audit, replay, debugging, evaluation
+summary items      -> cheaper model context, faster continuation
+```
+
+`ConversationMemory.add_summary(...)` persists a summary as a derived timeline item.
+
+The summary records which items it covers:
+
+```text
+covered_item_ids
+```
+
+That makes the summary traceable. A reviewer can see exactly which earlier items were compressed into it.
+
+## LLM Boundary
+
+The conversation state is richer than the payload sent to a model.
+
+Stored messages include:
+
+```text
+id
+created_at
+run_id
+model_name
+usage
+metadata
+tool_calls
+```
+
+LLM-facing messages are intentionally smaller and follow a LangChain-style naming convention:
+
+```text
+SystemMessage
+HumanMessage
+AIMessage
+ToolMessage
+ToolCall
+```
+
+Defined in:
+
+```text
+src/llm_memory/llm/message.py
+```
+
+The chat model interface is:
+
+```text
+ChatModel.invoke(messages) -> AIMessage
+```
+
+Defined in:
+
+```text
+src/llm_memory/llm/interface.py
+```
+
+Adapters convert internal messages to LLM-facing messages:
+
+```text
+src/llm_memory/llm/adapters.py
+```
+
+This boundary keeps provider/model concerns out of the stored conversation state.
 
 ## Relationship To LangGraph
 
@@ -460,6 +643,7 @@ multiple interchangeable storage backends
 cache + primary storage composition
 message metadata and usage tracking
 message history processors
+model-message adapters
 SQLite conversation item schema
 ```
 

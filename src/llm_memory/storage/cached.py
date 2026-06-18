@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from llm_memory.conversation.state import ConversationState
-from llm_memory.conversation.state import Message
+from llm_memory.context.conversation.state import ConversationItem
+from llm_memory.context.conversation.state import ConversationState
+from llm_memory.context.conversation.state import Message
 from llm_memory.storage.interface import ConversationStorage
 
 
@@ -25,9 +26,9 @@ class CachedConversationStorage:
         if primary_state is None:
             return None
 
-        self._cache.replace_messages(
+        self._cache.replace_items(
             thread_id=thread_id,
-            messages=primary_state.messages,
+            items=primary_state.items,
         )
 
         return primary_state
@@ -37,12 +38,22 @@ class CachedConversationStorage:
         self._cache.create_thread(thread_id)
 
     def append_message(self, thread_id: str, message: Message) -> None:
-        self._primary.append_message(thread_id, message)
-        self._cache.append_message(thread_id, message)
+        self.append_item(thread_id, message)
+
+    def append_item(self, thread_id: str, item: ConversationItem) -> None:
+        self._primary.append_item(thread_id, item)
+        self._cache.append_item(thread_id, item)
+
+    def replace_items(
+        self,
+        thread_id: str,
+        items: list[ConversationItem],
+    ) -> None:
+        self._primary.replace_items(thread_id, items)
+        self._cache.replace_items(thread_id, items)
 
     def replace_messages(self, thread_id: str, messages: list[Message]) -> None:
-        self._primary.replace_messages(thread_id, messages)
-        self._cache.replace_messages(thread_id, messages)
+        self.replace_items(thread_id, messages)
 
     def delete(self, thread_id: str) -> None:
         self._primary.delete(thread_id)

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from llm_memory.conversation.state import ConversationState
-from llm_memory.conversation.state import Message
+from llm_memory.context.conversation.state import ConversationItem
+from llm_memory.context.conversation.state import ConversationState
+from llm_memory.context.conversation.state import Message
 
 
 class ConversationStorage(Protocol):
@@ -14,6 +15,16 @@ class ConversationStorage(Protocol):
         ...
 
     def append_message(self, thread_id: str, message: Message) -> None:
+        ...
+
+    def append_item(self, thread_id: str, item: ConversationItem) -> None:
+        ...
+
+    def replace_items(
+        self,
+        thread_id: str,
+        items: list[ConversationItem],
+    ) -> None:
         ...
 
     def replace_messages(self, thread_id: str, messages: list[Message]) -> None:

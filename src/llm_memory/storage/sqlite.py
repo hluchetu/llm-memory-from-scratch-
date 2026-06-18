@@ -5,8 +5,10 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from llm_memory.conversation.state import ConversationState
-from llm_memory.conversation.state import Message
+from llm_memory.context.conversation.state import ConversationItem
+from llm_memory.context.conversation.state import ConversationState
+from llm_memory.context.conversation.state import Message
+from llm_memory.context.conversation.state import SummaryItem
 
 
 class SQLiteStorage:
@@ -33,6 +35,7 @@ class SQLiteStorage:
                 """
                 SELECT
                     id,
+                    item_type,
                     role,
                     content,
                     created_at,
@@ -42,7 +45,6 @@ class SQLiteStorage:
                     metadata
                 FROM conversation_items
                 WHERE conversation_id = ?
-                AND item_type = 'message'
                 ORDER BY position ASC
                 """,
                 (thread_id,),
@@ -50,25 +52,16 @@ class SQLiteStorage:
 
         return ConversationState(
             thread_id=thread_id,
-            messages=[
-                Message(
-                    id=row["id"],
-                    role=row["role"],
-                    content=row["content"],
-                    created_at=datetime.fromisoformat(row["created_at"]),
-                    run_id=row["run_id"],
-                    model_name=row["model_name"],
-                    usage=json.loads(row["usage"]),
-                    metadata=json.loads(row["metadata"]),
-                )
+            items=[
+                self._row_to_item(row)
                 for row in rows
             ],
         )
 
     def save(self, state: ConversationState) -> None:
-        self.replace_messages(
+        self.replace_items(
             thread_id=state.thread_id,
-            messages=state.messages,
+            items=state.items,
         )
 
     def create_thread(self, thread_id: str) -> None:
@@ -83,6 +76,9 @@ class SQLiteStorage:
             )
 
     def append_message(self, thread_id: str, message: Message) -> None:
+        self.append_item(thread_id, message)
+
+    def append_item(self, thread_id: str, item: ConversationItem) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
@@ -103,38 +99,13 @@ class SQLiteStorage:
                 (thread_id,),
             ).fetchone()["next_position"]
 
-            connection.execute(
-                """
-                INSERT INTO conversation_items (
-                    id,
-                    conversation_id,
-                    item_type,
-                    position,
-                    role,
-                    content,
-                    created_at,
-                    run_id,
-                    model_name,
-                    usage,
-                    metadata
-                )
-                VALUES (?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    message.id,
-                    thread_id,
-                    position,
-                    message.role,
-                    message.content,
-                    message.created_at.isoformat(),
-                    message.run_id,
-                    message.model_name,
-                    json.dumps(message.usage or {}),
-                    json.dumps(message.metadata),
-                ),
-            )
+            self._insert_item(connection, thread_id, position, item)
 
-    def replace_messages(self, thread_id: str, messages: list[Message]) -> None:
+    def replace_items(
+        self,
+        thread_id: str,
+        items: list[ConversationItem],
+    ) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
@@ -151,39 +122,11 @@ class SQLiteStorage:
                 (thread_id,),
             )
 
-            connection.executemany(
-                """
-                INSERT INTO conversation_items (
-                    id,
-                    conversation_id,
-                    item_type,
-                    position,
-                    role,
-                    content,
-                    created_at,
-                    run_id,
-                    model_name,
-                    usage,
-                    metadata
-                )
-                VALUES (?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        message.id,
-                        thread_id,
-                        position,
-                        message.role,
-                        message.content,
-                        message.created_at.isoformat(),
-                        message.run_id,
-                        message.model_name,
-                        json.dumps(message.usage or {}),
-                        json.dumps(message.metadata),
-                    )
-                    for position, message in enumerate(messages)
-                ],
-            )
+            for position, item in enumerate(items):
+                self._insert_item(connection, thread_id, position, item)
+
+    def replace_messages(self, thread_id: str, messages: list[Message]) -> None:
+        self.replace_items(thread_id, messages)
 
     def delete(self, thread_id: str) -> None:
         with self._connect() as connection:
@@ -198,6 +141,96 @@ class SQLiteStorage:
         connection.execute("PRAGMA foreign_keys = ON")
 
         return connection
+
+    def _insert_item(
+        self,
+        connection: sqlite3.Connection,
+        thread_id: str,
+        position: int,
+        item: ConversationItem,
+    ) -> None:
+        if isinstance(item, Message):
+            item_type = "message"
+            role = item.role
+            content = item.content
+            run_id = item.run_id
+            model_name = item.model_name
+            usage = item.usage or {}
+            metadata = item.metadata
+        elif isinstance(item, SummaryItem):
+            item_type = "summary"
+            role = None
+            content = item.content
+            run_id = None
+            model_name = None
+            usage = {}
+            metadata = {
+                "metadata": item.metadata,
+                "covered_item_ids": item.covered_item_ids,
+            }
+        else:
+            item_type = getattr(item, "item_type", "unknown")
+            role = None
+            content = ""
+            run_id = None
+            model_name = None
+            usage = {}
+            metadata = item.metadata
+
+        connection.execute(
+            """
+            INSERT INTO conversation_items (
+                id,
+                conversation_id,
+                item_type,
+                position,
+                role,
+                content,
+                created_at,
+                run_id,
+                model_name,
+                usage,
+                metadata
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                item.id,
+                thread_id,
+                item_type,
+                position,
+                role,
+                content,
+                item.created_at.isoformat(),
+                run_id,
+                model_name,
+                json.dumps(usage),
+                json.dumps(metadata),
+            ),
+        )
+
+    def _row_to_item(self, row: sqlite3.Row) -> ConversationItem:
+        metadata = json.loads(row["metadata"])
+
+        if row["item_type"] == "summary":
+            return SummaryItem(
+                id=row["id"],
+                content=row["content"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+                covered_item_ids=metadata.get("covered_item_ids", []),
+                metadata=metadata.get("metadata", {}),
+            )
+
+        return Message(
+            id=row["id"],
+            role=row["role"],
+            content=row["content"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            run_id=row["run_id"],
+            model_name=row["model_name"],
+            usage=json.loads(row["usage"]),
+            metadata=metadata,
+        )
 
     def _create_tables(self) -> None:
         with self._connect() as connection:

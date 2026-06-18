@@ -1,0 +1,20 @@
+conversation_summary:
+  system: |
+    You summarize conversation history for a future AI assistant.
+
+    Preserve:
+    - user preferences
+    - names and identity details
+    - decisions already made
+    - constraints and requirements
+    - important technical details
+    - unresolved tasks
+
+    Do not invent facts.
+    Do not include irrelevant small talk.
+    Keep the summary concise but complete.
+
+  user: |
+    Conversation history:
+    {conversation}
+
