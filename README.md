@@ -42,7 +42,7 @@ Planned capabilities:
 ```text
 long-term MemoryRecord store
 semantic retrieval with embeddings and vector search
-keyword, vector, time, and graph retrieval indexes
+keyword, vector, time, and graph retrieval strategies
 memory extraction from conversations into semantic, episodic, procedural, preference, and decision records
 profile-style entity memory for durable user or project facts
 knowledge base ingestion for files and folders
@@ -51,10 +51,10 @@ semantic cache to reduce repeated LLM calls
 multi-agent shared memory / blackboard patterns
 context-window telemetry and budget reporting
 tool-call memory records
-provider adapters for external memory systems
+integrations for external memory systems
 ```
 
-The repo intentionally starts with primitives before integrations. The goal is to understand and own the architecture before plugging in vector databases, memory providers, agent frameworks, or UI layers.
+The repo intentionally starts with primitives before integrations. The goal is to understand and own the architecture before plugging in vector databases, external memory systems, agent frameworks, or UI layers.
 
 ## Memory Layers
 
@@ -68,12 +68,12 @@ flowchart TB
     ShortTerm --> Trimming["Token-budget trimming"]
 
     LongTerm --> Records["MemoryRecord store"]
-    LongTerm --> Indexes["Retrieval indexes"]
+    LongTerm --> Retrieval["Retrieval strategies"]
 
-    Indexes --> Keyword["Keyword"]
-    Indexes --> Vector["Vector"]
-    Indexes --> Time["Time"]
-    Indexes --> Graph["Graph"]
+    Retrieval --> Keyword["Keyword"]
+    Retrieval --> Vector["Vector"]
+    Retrieval --> Time["Time"]
+    Retrieval --> Graph["Graph"]
 ```
 
 Short-term memory answers:
@@ -95,7 +95,7 @@ The codebase separates concepts that are often mixed together:
 ```text
 context    -> what the agent/model should know
 storage    -> where memory is persisted
-indexes    -> how memory is retrieved
+retrieval  -> how memory is searched
 llm        -> provider-neutral model messages and invocation
 prompts    -> versioned prompt templates
 ```
@@ -115,7 +115,7 @@ Long-term memory follows the same principle:
 
 ```text
 MemoryRecord is the source of truth.
-Indexes make records retrievable.
+Retrievers make records searchable.
 ```
 
 Vectors, keyword search, graph edges, and timestamps are retrieval structures. They are not the memory itself.
@@ -132,7 +132,10 @@ src/agent_memory/
   storage/            # persistence backends
   llm/                # provider-neutral LLM boundary
   prompts/            # YAML prompt templates
-  providers/          # provider integrations
+  long_term/          # long-term memory records, store protocol, retrievers
+  retrieval/          # keyword, vector, time, and graph retrieval strategies
+  ingestion/          # file/source loading into memory records
+  integrations/       # external memory systems such as Mem0 or Zep
   settings.py
   errors.py
 
@@ -208,13 +211,13 @@ preference
 decision
 ```
 
-Retrieval is handled through indexes:
+Retrieval is handled through strategies:
 
 ```text
-keyword index
-vector index
-time index
-graph / relationship index
+keyword retrieval
+vector retrieval
+time retrieval
+graph / relationship retrieval
 ```
 
 This avoids creating separate memory systems too early while still supporting production retrieval patterns.
@@ -229,7 +232,7 @@ Explains thread-scoped conversation memory, token-budget trimming, summary compr
 
 [Long-Term Memory](docs/long-term-memory.md)
 
-Explains the planned long-term architecture: `MemoryRecord` source of truth, retrieval indexes, semantic memory, episodic memory, procedural memory, preference memory, and decision memory.
+Explains the planned long-term architecture: `MemoryRecord` source of truth, retrieval strategies, semantic memory, episodic memory, procedural memory, preference memory, and decision memory.
 
 ## Examples
 
@@ -251,8 +254,8 @@ Next major work:
 ```text
 long-term MemoryRecord model
 long-term memory store protocol
-keyword index
-vector index with pluggable embeddings
+keyword retriever
+vector retriever with pluggable embeddings
 memory extraction from conversation messages
 retrieval across namespaces
 ```

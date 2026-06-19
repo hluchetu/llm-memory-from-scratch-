@@ -6,7 +6,7 @@ This project uses one core principle:
 
 ```text
 MemoryRecord is the source of truth.
-Indexes make records retrievable.
+Retrievers make records searchable.
 ```
 
 That matters because vector embeddings, keyword search, graph edges, and timestamps are retrieval structures. They help the system find memory, but they are not the memory itself.
@@ -40,21 +40,21 @@ The long-term memory layer has two separate responsibilities:
 
 ```text
 store   -> durable source of truth
-index   -> retrieval path
+retriever -> retrieval path
 ```
 
 ```mermaid
 flowchart TB
     App["Application / agent"] --> Memory["LongTermMemory API"]
     Memory --> Store["MemoryRecord store"]
-    Memory --> Indexes["Memory indexes"]
+    Memory --> Retrievers["Memory retrievers"]
 
     Store --> Records["MemoryRecord source of truth"]
 
-    Indexes --> Keyword["Keyword index"]
-    Indexes --> Vector["Vector index"]
-    Indexes --> Time["Time index"]
-    Indexes --> Graph["Graph / relationship index"]
+    Retrievers --> Keyword["Keyword retriever"]
+    Retrievers --> Vector["Vector retriever"]
+    Retrievers --> Time["Time retriever"]
+    Retrievers --> Graph["Graph / relationship retriever"]
 
     Keyword --> Results["MemoryRecord results"]
     Vector --> Results
@@ -69,7 +69,7 @@ src/agent_memory/
   long_term/
     state.py       # MemoryRecord, MemoryType
     store.py       # LongTermMemoryStore protocol
-    index.py       # MemoryIndex protocol
+    retriever.py   # MemoryRetriever protocol
     memory.py      # LongTermMemory public API
 ```
 
@@ -82,14 +82,33 @@ src/agent_memory/storage/
   long_term_sqlite.py
 ```
 
-Retrieval indexes:
+Retrieval strategies:
 
 ```text
-src/agent_memory/indexes/
+src/agent_memory/retrieval/
   keyword.py
   vector.py
   time.py
   graph.py
+```
+
+External memory systems belong under:
+
+```text
+src/agent_memory/integrations/
+  mem0.py
+  zep.py
+```
+
+Source ingestion belongs under:
+
+```text
+src/agent_memory/ingestion/
+  markdown.py
+  json.py
+  pdf.py
+  folder.py
+  claude_md.py
 ```
 
 The first implementation can be simple, but the architecture should already make room for vector retrieval.
@@ -192,19 +211,19 @@ sequenceDiagram
     participant Memory as LongTermMemory
     participant Store as RecordStore
     participant Embedder
-    participant VectorIndex
+    participant VectorRetriever
 
     App->>Memory: put(MemoryRecord)
     Memory->>Store: save(record)
     Memory->>Embedder: embed(record.value)
     Embedder-->>Memory: vector
-    Memory->>VectorIndex: index(record.id, vector)
+    Memory->>VectorRetriever: add(record.id, vector)
 
     App->>Memory: search(namespace, query)
     Memory->>Embedder: embed(query)
     Embedder-->>Memory: query vector
-    Memory->>VectorIndex: nearest(namespace, query vector)
-    VectorIndex-->>Memory: record ids
+    Memory->>VectorRetriever: search(namespace, query vector)
+    VectorRetriever-->>Memory: record ids
     Memory->>Store: get_many(record ids)
     Store-->>Memory: MemoryRecord list
     Memory-->>App: records
@@ -247,8 +266,8 @@ Typical storage:
 
 ```text
 MemoryRecord store
-vector index
-keyword index
+vector retriever
+keyword retriever
 metadata filters
 ```
 
@@ -261,7 +280,7 @@ namespace filter
 memory_type filter
 ```
 
-Semantic memory should usually be vector-indexed because users rarely ask for facts with exact wording.
+Semantic memory should usually be vector-searchable because users rarely ask for facts with exact wording.
 
 ## Episodic Memory
 
@@ -290,8 +309,8 @@ Typical storage:
 
 ```text
 MemoryRecord store
-time index
-vector index
+time retriever
+vector retriever
 metadata filters
 ```
 
@@ -337,8 +356,8 @@ Typical storage:
 
 ```text
 MemoryRecord store
-keyword index
-optional vector index
+keyword retriever
+optional vector retriever
 direct key lookup
 ```
 
@@ -375,7 +394,7 @@ Typical storage:
 
 ```text
 MemoryRecord store
-vector index
+vector retriever
 direct key lookup
 metadata filters
 ```
@@ -403,7 +422,7 @@ MemoryRecord(
     key="decision:long-term-memory-shape",
     value=(
         "Use one long-term memory record store with namespace, key, value, "
-        "memory_type, metadata, and retrieval indexes. Do not create separate "
+        "memory_type, metadata, and retrievers. Do not create separate "
         "systems for each memory category."
     ),
     memory_type="decision",
@@ -419,8 +438,8 @@ Typical storage:
 
 ```text
 MemoryRecord store
-keyword index
-vector index
+keyword retriever
+vector retriever
 metadata filters
 ```
 
@@ -497,15 +516,15 @@ class LongTermMemoryStore(Protocol):
         ...
 ```
 
-This layer should work even if there is no vector index.
+This layer should work even if there is no vector retriever.
 
-## Index Protocol
+## Retriever Protocol
 
-Indexes make memory searchable.
+Retrievers make memory searchable.
 
 ```python
-class MemoryIndex(Protocol):
-    def index(self, record: MemoryRecord) -> None:
+class MemoryRetriever(Protocol):
+    def add(self, record: MemoryRecord) -> None:
         ...
 
     def search(
@@ -521,14 +540,14 @@ class MemoryIndex(Protocol):
         ...
 ```
 
-The index returns record IDs. The store returns the full `MemoryRecord` objects.
+The retriever returns record IDs. The store returns the full `MemoryRecord` objects.
 
 That separation keeps retrieval flexible:
 
 ```text
-keyword index -> record ids -> store -> MemoryRecord
-vector index  -> record ids -> store -> MemoryRecord
-graph index   -> record ids -> store -> MemoryRecord
+keyword retriever -> record ids -> store -> MemoryRecord
+vector retriever  -> record ids -> store -> MemoryRecord
+graph retriever   -> record ids -> store -> MemoryRecord
 ```
 
 ## Retrieval Strategies
@@ -536,8 +555,8 @@ graph index   -> record ids -> store -> MemoryRecord
 Start with:
 
 ```text
-keyword search
-vector search with fake embeddings
+keyword retrieval
+vector retrieval with fake embeddings
 ```
 
 Then grow into:
@@ -593,16 +612,16 @@ sequenceDiagram
     participant Extractor
     participant Memory
     participant Store
-    participant Index
+    participant Retriever
 
     App->>Extractor: conversation messages
     Extractor-->>App: MemoryRecord list
     App->>Memory: put(record)
     Memory->>Store: save(record)
-    Memory->>Index: index(record)
+    Memory->>Retriever: add(record)
     App->>Memory: search(namespace, query)
-    Memory->>Index: search(query)
-    Index-->>Memory: record ids
+    Memory->>Retriever: search(query)
+    Retriever-->>Memory: record ids
     Memory->>Store: get_many(ids)
     Store-->>Memory: MemoryRecord list
     Memory-->>App: reusable memories
@@ -643,15 +662,15 @@ MemoryRecord(namespace, key, value, memory_type, metadata)
 
 Short-term memory is scoped to a thread.
 
-Long-term memory is scoped to a namespace and retrieved through indexes.
+Long-term memory is scoped to a namespace and retrieved through retrievers.
 
 ```mermaid
 flowchart LR
     ShortTerm["Short-term conversation timeline"] --> Extractor["Memory extractor"]
     Extractor --> Record["MemoryRecord"]
     Record --> Store["Source-of-truth store"]
-    Record --> Index["Retrieval indexes"]
-    Index --> Future["Future conversation context"]
+    Record --> Retriever["Retrieval strategies"]
+    Retriever --> Future["Future conversation context"]
 ```
 
 This keeps the system flexible without pretending vector stores, graph stores, and databases are the same thing.
