@@ -65,7 +65,7 @@ flowchart TB
 Proposed package shape:
 
 ```text
-src/llm_memory/
+src/agent_memory/
   long_term/
     state.py       # MemoryRecord, MemoryType
     store.py       # LongTermMemoryStore protocol
@@ -76,7 +76,7 @@ src/llm_memory/
 Storage adapters:
 
 ```text
-src/llm_memory/storage/
+src/agent_memory/storage/
   long_term_memory.py
   long_term_json.py
   long_term_sqlite.py
@@ -85,7 +85,7 @@ src/llm_memory/storage/
 Retrieval indexes:
 
 ```text
-src/llm_memory/indexes/
+src/agent_memory/indexes/
   keyword.py
   vector.py
   time.py
@@ -655,4 +655,3 @@ flowchart LR
 ```
 
 This keeps the system flexible without pretending vector stores, graph stores, and databases are the same thing.
-

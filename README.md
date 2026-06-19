@@ -1,190 +1,227 @@
-# LLM Memory From Scratch
+# Agent Memory From Scratch
 
-A Python implementation of memory primitives for LLM applications.
+An experimental Python implementation of memory architecture for AI agents, built from scratch.
 
-The project separates three concerns that are often mixed together:
+The purpose of this repo is to explore how memory systems for AI agents should be designed when they need to survive beyond a single prompt. It starts with the foundations: conversation state, persistence, context trimming, summarization, and model-facing message boundaries. From there, it will grow into long-term memory, semantic retrieval, profile memory, knowledge ingestion, caching, multi-agent shared memory, and other capabilities as agent memory patterns continue to evolve.
+
+The project is organized around one simple idea:
 
 ```text
-context    -> what the model should know
-storage    -> where conversation state is persisted
-llm        -> provider-neutral model messages and invocation
+agents need different memory layers for different jobs
 ```
 
-The current implementation focuses on short-term conversation memory: raw message history, storage backends, summary-based context compression, and a clean model boundary.
+Conversation history, summaries, user preferences, project decisions, semantic facts, episodic events, and procedural rules should not be treated as one vague blob of chat history. They need clear models, storage boundaries, and retrieval strategies.
 
-## Architecture
+## Capabilities
+
+Implemented now:
+
+```text
+persistent conversation memory across sessions
+thread-scoped short-term memory
+token-budget context trimming
+summary-based context compression
+persisted summaries as derived timeline items
+in-process, JSON, Markdown, SQLite, and cached storage
+provider-neutral LLM message boundary
+YAML prompt loading
+```
+
+Planned capabilities:
+
+```text
+long-term MemoryRecord store
+semantic retrieval with embeddings and vector search
+keyword, vector, time, and graph retrieval indexes
+memory extraction from conversations into semantic, episodic, procedural, preference, and decision records
+profile-style entity memory for durable user or project facts
+knowledge base ingestion for files and folders
+configurable chunking for ingested documents
+semantic cache to reduce repeated LLM calls
+multi-agent shared memory / blackboard patterns
+context-window telemetry and budget reporting
+tool-call memory records
+provider adapters for external memory systems
+```
+
+The repo intentionally starts with primitives before integrations. The goal is to understand and own the architecture before plugging in vector databases, memory providers, agent frameworks, or UI layers.
+
+## Memory Layers
 
 ```mermaid
 flowchart TB
-    App["Application"] --> Context["context/"]
-    Context --> Conversation["conversation memory"]
-    Conversation --> Storage["storage/"]
-    Conversation --> Processors["message processors"]
-    Processors --> LLM["llm/"]
-    Prompts["prompts/"] --> Processors
+    Agent["AI agent"] --> ShortTerm["Short-term memory"]
+    Agent --> LongTerm["Long-term memory"]
 
-    Storage --> Memory["MemoryStorage"]
-    Storage --> JSON["JsonStorage"]
-    Storage --> Markdown["MarkdownStorage"]
-    Storage --> SQLite["SQLiteStorage"]
+    ShortTerm --> Conversation["Conversation timeline"]
+    ShortTerm --> Summary["Summary context"]
+    ShortTerm --> Trimming["Token-budget trimming"]
+
+    LongTerm --> Records["MemoryRecord store"]
+    LongTerm --> Indexes["Retrieval indexes"]
+
+    Indexes --> Keyword["Keyword"]
+    Indexes --> Vector["Vector"]
+    Indexes --> Time["Time"]
+    Indexes --> Graph["Graph"]
 ```
 
+Short-term memory answers:
+
 ```text
-src/llm_memory/
+What happened in this thread?
+```
+
+Long-term memory answers:
+
+```text
+What should be reusable later?
+```
+
+## Architecture Principles
+
+The codebase separates concepts that are often mixed together:
+
+```text
+context    -> what the agent/model should know
+storage    -> where memory is persisted
+indexes    -> how memory is retrieved
+llm        -> provider-neutral model messages and invocation
+prompts    -> versioned prompt templates
+```
+
+The short-term memory implementation already follows this boundary:
+
+```mermaid
+flowchart LR
+    App["Application"] --> Context["context/conversation"]
+    Context --> Storage["storage"]
+    Context --> Processors["processors"]
+    Processors --> LLM["llm"]
+    Prompts["prompts"] --> Processors
+```
+
+Long-term memory follows the same principle:
+
+```text
+MemoryRecord is the source of truth.
+Indexes make records retrievable.
+```
+
+Vectors, keyword search, graph edges, and timestamps are retrieval structures. They are not the memory itself.
+
+## Repository Shape
+
+```text
+src/agent_memory/
   context/
-    conversation/
-      state.py        # ConversationItem, Message, SummaryItem, ConversationState
-      memory.py       # ConversationMemory public API
-      processors.py   # Message history processors
+    conversation/     # short-term conversation memory
     profile/          # reserved for profile memory
-    semantic/         # reserved for semantic long-term memory
+    semantic/         # reserved for semantic memory concepts
 
-  storage/
-    interface.py      # ConversationStorage protocol
-    memory.py         # in-process storage
-    json.py           # JSON file storage
-    markdown.py       # Markdown file storage
-    sqlite.py         # SQLite storage
-    cached.py         # cache + primary storage composition
-
-  llm/
-    message.py        # SystemMessage, HumanMessage, AIMessage, ToolMessage
-    interface.py      # ChatModel protocol
-    adapters.py       # internal conversation messages -> LLM messages
-
-  prompts/
-    loader.py
-    conversation_summary.yaml
-
+  storage/            # persistence backends
+  llm/                # provider-neutral LLM boundary
+  prompts/            # YAML prompt templates
+  providers/          # provider integrations
   settings.py
   errors.py
+
+docs/
+  short-term-memory.md
+  long-term-memory.md
 ```
 
-## Core Ideas
+## Implemented
 
-Conversation memory stores the full timeline for a thread.
+Short-term memory foundation:
 
 ```text
-Message
+ConversationState
+ConversationMemory
 Message
 SummaryItem
-Message
+ConversationStorage protocol
 ```
 
-Raw messages remain the source of truth. Summaries are derived context that can reduce model input size without deleting the original conversation.
-
-The model-facing context can be smaller than the stored timeline:
+Context management:
 
 ```text
-summary of older messages
-+
-recent raw messages
+token-budget trimming
+summary-based compression
+summary persistence as derived timeline items
 ```
 
-This follows the same practical shape used by modern agent frameworks: persist conversation state, process message history before model invocation, and keep storage separate from prompt construction.
-
-## Short-Term Memory
-
-`ConversationMemory` is the public API for thread-level memory.
-
-```python
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.storage.memory import MemoryStorage
-
-memory = ConversationMemory(storage=MemoryStorage())
-
-memory.add_message(
-    thread_id="thread-1",
-    role="user",
-    content="Explain conversation memory.",
-)
-
-messages = memory.get_messages("thread-1")
-```
-
-## Summary Processing
-
-`SummarizeOldMessagesProcessor` summarizes older messages and keeps recent messages raw.
-
-It does not delete stored messages. It prepares model context.
-
-```python
-from llm_memory.context.conversation.processors import ProcessingContext
-from llm_memory.context.conversation.processors import SummarizeOldMessagesProcessor
-
-processor = SummarizeOldMessagesProcessor(
-    model=summary_model,
-    trigger_message_count=8,
-    keep_recent_messages=4,
-)
-
-model_context = processor.process(
-    messages=memory.get_messages("thread-1"),
-    context=ProcessingContext(),
-)
-```
-
-Summaries can also be persisted explicitly as `SummaryItem`.
-
-```python
-summary_message = model_context[0]
-covered_item_ids = summary_message.metadata["covered_item_ids"]
-
-memory.add_summary(
-    thread_id="thread-1",
-    content=summary_message.content.removeprefix(
-        "Conversation summary so far:\n"
-    ),
-    covered_item_ids=covered_item_ids,
-)
-```
-
-## Storage Backends
-
-The same `ConversationMemory` API works with different storage backends:
-
-```python
-from pathlib import Path
-
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.storage.sqlite import SQLiteStorage
-
-storage = SQLiteStorage(Path(".memory") / "conversations.db")
-memory = ConversationMemory(storage=storage)
-```
-
-Available storage backends:
+Storage:
 
 ```text
-MemoryStorage
-JsonStorage
-MarkdownStorage
-SQLiteStorage
-CachedConversationStorage
+in-process storage
+JSON storage
+Markdown storage
+SQLite storage
+cached storage composition
 ```
 
-## LLM Boundary
-
-The LLM interface is provider-neutral:
-
-```python
-class ChatModel(Protocol):
-    def invoke(self, messages: list[Message]) -> AIMessage:
-        ...
-```
-
-Internal conversation messages are separate from model-facing messages.
+LLM boundary:
 
 ```text
-context.conversation.state.Message  -> stored conversation item
-llm.message.Message                 -> model input union
+SystemMessage
+HumanMessage
+AIMessage
+ToolMessage
+ChatModel protocol
+internal-to-LLM message adapters
 ```
 
-Adapters convert internal messages into model messages.
+Prompt management:
+
+```text
+YAML prompt files
+prompt loader
+conversation summary prompt
+```
+
+## Long-Term Memory Direction
+
+Long-term memory will use one record model:
+
+```text
+namespace + key + value + memory_type + metadata
+```
+
+Memory categories are represented by `memory_type`:
+
+```text
+semantic
+episodic
+procedural
+preference
+decision
+```
+
+Retrieval is handled through indexes:
+
+```text
+keyword index
+vector index
+time index
+graph / relationship index
+```
+
+This avoids creating separate memory systems too early while still supporting production retrieval patterns.
+
+## Documentation
+
+Start here:
+
+[Short-Term Memory](docs/short-term-memory.md)
+
+Explains thread-scoped conversation memory, token-budget trimming, summary compression, persisted summaries, storage backends, and the LLM boundary.
+
+[Long-Term Memory](docs/long-term-memory.md)
+
+Explains the planned long-term architecture: `MemoryRecord` source of truth, retrieval indexes, semantic memory, episodic memory, procedural memory, preference memory, and decision memory.
 
 ## Examples
-
-Run examples with:
 
 ```bash
 PYTHONPATH=src python examples/conversation_memory.py
@@ -197,34 +234,17 @@ PYTHONPATH=src python examples/sqlite_storage.py
 PYTHONPATH=src python examples/cached_storage.py
 ```
 
-## Documentation
+## Roadmap
 
-Additional architecture notes:
-
-```text
-docs/short-term-memory.md
-docs/long-term-memory.md
-```
-
-## Current Scope
-
-Implemented:
+Next major work:
 
 ```text
-short-term conversation memory
-message history processing
-summary-based context compression
-summary persistence as derived timeline items
-JSON, Markdown, SQLite, cached, and in-process storage
-provider-neutral LLM message boundary
-YAML prompt loading
+long-term MemoryRecord model
+long-term memory store protocol
+keyword index
+vector index with pluggable embeddings
+memory extraction from conversation messages
+retrieval across namespaces
 ```
 
-Planned next:
-
-```text
-long-term memory extraction
-semantic memory records
-profile/preferences memory
-memory retrieval across threads
-```
+The intent is to build the memory system from first principles while keeping the architecture compatible with how modern agent frameworks separate state, persistence, retrieval, and model context.

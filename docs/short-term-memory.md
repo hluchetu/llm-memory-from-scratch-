@@ -71,7 +71,7 @@ This is the same architectural role as a conversation ID in many LLM systems: it
 Defined in:
 
 ```text
-src/llm_memory/context/conversation/state.py
+src/agent_memory/context/conversation/state.py
 ```
 
 Current fields:
@@ -123,7 +123,7 @@ This mirrors what production LLM systems usually need for tracing, debugging, ev
 Defined in:
 
 ```text
-src/llm_memory/context/conversation/state.py
+src/agent_memory/context/conversation/state.py
 ```
 
 It contains:
@@ -156,7 +156,7 @@ The `messages` property is a filtered view over `items`. That leaves room for th
 Defined in:
 
 ```text
-src/llm_memory/context/conversation/memory.py
+src/agent_memory/context/conversation/memory.py
 ```
 
 It exposes:
@@ -189,7 +189,7 @@ It does not know whether the backend is in-memory, JSON, Markdown, SQLite, cache
 Defined in:
 
 ```text
-src/llm_memory/storage/interface.py
+src/agent_memory/storage/interface.py
 ```
 
 The contract is append-first:
@@ -273,7 +273,7 @@ Each backend implements the same `ConversationStorage` contract.
 Defined in:
 
 ```text
-src/llm_memory/storage/memory.py
+src/agent_memory/storage/memory.py
 ```
 
 Stores conversation state in Python memory.
@@ -285,7 +285,7 @@ This backend is fast and useful for runtime caching, examples, and tests. It is 
 Defined in:
 
 ```text
-src/llm_memory/storage/json.py
+src/agent_memory/storage/json.py
 ```
 
 Stores conversation state in a JSON file.
@@ -297,7 +297,7 @@ This backend is useful for local structured persistence and inspection. It is si
 Defined in:
 
 ```text
-src/llm_memory/storage/markdown.py
+src/agent_memory/storage/markdown.py
 ```
 
 Stores conversation state as Markdown.
@@ -309,7 +309,7 @@ This backend optimizes for readability. It is useful when conversation traces sh
 Defined in:
 
 ```text
-src/llm_memory/storage/sqlite.py
+src/agent_memory/storage/sqlite.py
 ```
 
 Stores conversation state in SQLite using a normalized schema:
@@ -340,7 +340,7 @@ The Python API currently writes message items. The schema is intentionally broad
 Defined in:
 
 ```text
-src/llm_memory/storage/cached.py
+src/agent_memory/storage/cached.py
 ```
 
 Combines a fast cache backend with a primary backend:
@@ -415,19 +415,65 @@ The storage layer can keep the full short-term timeline, while processors decide
 Defined in:
 
 ```text
-src/llm_memory/context/conversation/processors.py
+src/agent_memory/context/conversation/processors.py
 ```
 
 Current processors include:
 
 ```text
-KeepRecentMessagesProcessor
+KeepWithinTokenBudgetProcessor
 FilterByRoleProcessor
 SummarizeOldMessagesProcessor
 ProcessorPipeline
 ```
 
 This separation is important because model context should be selected intentionally. Persisting every message does not mean every message must be sent back to the model on every turn.
+
+### Token Budget Trimming
+
+`KeepWithinTokenBudgetProcessor` keeps recent context within a model token budget.
+
+This is preferred over message-count trimming because one message can be tiny:
+
+```text
+yes
+```
+
+or extremely large:
+
+```text
+Here is a long traceback...
+```
+
+The processor does not guess tokenization. It receives a `TokenCounter`, so production code can use the tokenizer for the model being called.
+
+```python
+class TokenCounter(Protocol):
+    def count_message(self, message: Message) -> int:
+        ...
+```
+
+The trimming strategy is:
+
+```text
+1. Preserve leading system messages when configured.
+2. Walk backward from the newest messages.
+3. Keep adding message groups while the token budget allows.
+4. Return the selected messages in original order.
+```
+
+Assistant messages with tool calls are grouped with following tool result messages. That prevents trimming from leaving a tool result without the assistant tool call that produced it.
+
+```mermaid
+flowchart LR
+    Messages["Stored messages"] --> Counter["TokenCounter"]
+    Messages --> Processor["KeepWithinTokenBudgetProcessor"]
+    Counter --> Processor
+    Processor --> System["Preserved system messages"]
+    Processor --> Recent["Newest messages within budget"]
+    System --> Context["Model context"]
+    Recent --> Context
+```
 
 ### Conversation Summary Processing
 
@@ -455,13 +501,13 @@ flowchart LR
 The summary prompt is stored separately from code:
 
 ```text
-src/llm_memory/prompts/conversation_summary.yaml
+src/agent_memory/prompts/conversation_summary.yaml
 ```
 
 The processor loads the prompt through:
 
 ```text
-src/llm_memory/prompts/loader.py
+src/agent_memory/prompts/loader.py
 ```
 
 This follows the same pattern as the agentic RAG repo: prompts are versioned text assets, while processors contain orchestration logic.
@@ -552,7 +598,7 @@ ToolCall
 Defined in:
 
 ```text
-src/llm_memory/llm/message.py
+src/agent_memory/llm/message.py
 ```
 
 The chat model interface is:
@@ -564,13 +610,13 @@ ChatModel.invoke(messages) -> AIMessage
 Defined in:
 
 ```text
-src/llm_memory/llm/interface.py
+src/agent_memory/llm/interface.py
 ```
 
 Adapters convert internal messages to LLM-facing messages:
 
 ```text
-src/llm_memory/llm/adapters.py
+src/agent_memory/llm/adapters.py
 ```
 
 This boundary keeps provider/model concerns out of the stored conversation state.

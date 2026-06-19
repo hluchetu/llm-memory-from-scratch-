@@ -5,6 +5,7 @@ from typing import Protocol
 
 from agent_memory.context.conversation.state import Message
 from agent_memory.context.conversation.state import MessageRole
+from agent_memory.errors import ContextBudgetExceededError
 from agent_memory.errors import InvalidProcessorConfigError
 from agent_memory.errors import MessageSummarizationError
 from agent_memory.llm.interface import ChatModel
@@ -27,19 +28,118 @@ class MessageHistoryProcessor(Protocol):
         ...
 
 
-class KeepRecentMessagesProcessor:
-    def __init__(self, max_messages: int) -> None:
-        self._max_messages = max_messages
+class TokenCounter(Protocol):
+    def count_message(self, message: Message) -> int:
+        ...
+
+
+class KeepWithinTokenBudgetProcessor:
+    def __init__(
+        self,
+        max_tokens: int,
+        token_counter: TokenCounter,
+        preserve_system_messages: bool = True,
+    ) -> None:
+        if max_tokens <= 0:
+            raise InvalidProcessorConfigError(
+                "max_tokens must be greater than 0."
+            )
+
+        self._max_tokens = max_tokens
+        self._token_counter = token_counter
+        self._preserve_system_messages = preserve_system_messages
 
     def process(
         self,
         messages: list[Message],
         context: ProcessingContext,
     ) -> list[Message]:
-        if len(messages) <= self._max_messages:
+        if not messages:
             return messages
 
-        return messages[-self._max_messages :]
+        preserved_messages, candidate_messages = self._split_preserved_messages(
+            messages
+        )
+        used_tokens = self._count_messages(preserved_messages)
+
+        if used_tokens > self._max_tokens:
+            raise ContextBudgetExceededError(
+                "Preserved system messages exceed the token budget."
+            )
+
+        selected_units: list[list[Message]] = []
+        message_units = self._group_message_units(candidate_messages)
+
+        for unit in reversed(message_units):
+            unit_tokens = self._count_messages(unit)
+
+            if used_tokens + unit_tokens > self._max_tokens:
+                if not selected_units:
+                    raise ContextBudgetExceededError(
+                        "The newest message group exceeds the remaining token budget."
+                    )
+
+                break
+
+            selected_units.append(unit)
+            used_tokens += unit_tokens
+
+        selected_messages = [
+            message
+            for unit in reversed(selected_units)
+            for message in unit
+        ]
+
+        return [
+            *preserved_messages,
+            *selected_messages,
+        ]
+
+    def _split_preserved_messages(
+        self,
+        messages: list[Message],
+    ) -> tuple[list[Message], list[Message]]:
+        if not self._preserve_system_messages:
+            return [], messages
+
+        preserved_messages: list[Message] = []
+        candidate_index = 0
+
+        for message in messages:
+            if message.role != "system":
+                break
+
+            preserved_messages.append(message)
+            candidate_index += 1
+
+        return preserved_messages, messages[candidate_index:]
+
+    def _group_message_units(
+        self,
+        messages: list[Message],
+    ) -> list[list[Message]]:
+        units: list[list[Message]] = []
+        index = 0
+
+        while index < len(messages):
+            message = messages[index]
+            unit = [message]
+            index += 1
+
+            if message.role == "assistant" and message.tool_calls:
+                while index < len(messages) and messages[index].role == "tool":
+                    unit.append(messages[index])
+                    index += 1
+
+            units.append(unit)
+
+        return units
+
+    def _count_messages(self, messages: list[Message]) -> int:
+        return sum(
+            self._token_counter.count_message(message)
+            for message in messages
+        )
 
 
 class FilterByRoleProcessor:
