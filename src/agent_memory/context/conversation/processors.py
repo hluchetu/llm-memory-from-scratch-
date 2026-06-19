@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from llm_memory.context.conversation.state import Message
-from llm_memory.context.conversation.state import MessageRole
-from llm_memory.errors import InvalidProcessorConfigError
-from llm_memory.errors import MessageSummarizationError
-from llm_memory.llm.interface import ChatModel
-from llm_memory.llm.message import HumanMessage
-from llm_memory.llm.message import SystemMessage
-from llm_memory.prompts.loader import load_prompt
+from agent_memory.context.conversation.state import Message
+from agent_memory.context.conversation.state import MessageRole
+from agent_memory.errors import InvalidProcessorConfigError
+from agent_memory.errors import MessageSummarizationError
+from agent_memory.llm.interface import ChatModel
+from agent_memory.llm.message import HumanMessage
+from agent_memory.llm.message import SystemMessage
+from agent_memory.prompts.loader import load_prompt
 
 
 @dataclass(frozen=True)

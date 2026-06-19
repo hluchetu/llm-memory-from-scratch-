@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from llm_memory.context.conversation.state import ConversationItem
-from llm_memory.context.conversation.state import ConversationState
-from llm_memory.context.conversation.state import Message
-from llm_memory.context.conversation.state import MessageRole
-from llm_memory.context.conversation.state import SummaryItem
-from llm_memory.storage.interface import ConversationStorage
-from llm_memory.storage.memory import MemoryStorage
+from agent_memory.context.conversation.state import ConversationItem
+from agent_memory.context.conversation.state import ConversationState
+from agent_memory.context.conversation.state import Message
+from agent_memory.context.conversation.state import MessageRole
+from agent_memory.context.conversation.state import SummaryItem
+from agent_memory.storage.interface import ConversationStorage
+from agent_memory.storage.memory import MemoryStorage
 
 
 class ConversationMemory:

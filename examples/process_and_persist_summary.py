@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.context.conversation.processors import ProcessingContext
-from llm_memory.context.conversation.processors import SummarizeOldMessagesProcessor
-from llm_memory.llm.message import AIMessage
-from llm_memory.llm.message import Message as LLMMessage
-from llm_memory.storage.memory import MemoryStorage
+from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.context.conversation.processors import ProcessingContext
+from agent_memory.context.conversation.processors import SummarizeOldMessagesProcessor
+from agent_memory.llm.message import AIMessage
+from agent_memory.llm.message import Message as LLMMessage
+from agent_memory.storage.memory import MemoryStorage
 
 
 class FakeSummaryModel:

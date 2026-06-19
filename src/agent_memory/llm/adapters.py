@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from llm_memory.context.conversation.state import Message as ConversationMessage
-from llm_memory.context.conversation.state import ToolCall as ConversationToolCall
-from llm_memory.llm.message import AIMessage
-from llm_memory.llm.message import HumanMessage
-from llm_memory.llm.message import Message
-from llm_memory.llm.message import SystemMessage
-from llm_memory.llm.message import ToolCall
-from llm_memory.llm.message import ToolMessage
+from agent_memory.context.conversation.state import Message as ConversationMessage
+from agent_memory.context.conversation.state import ToolCall as ConversationToolCall
+from agent_memory.llm.message import AIMessage
+from agent_memory.llm.message import HumanMessage
+from agent_memory.llm.message import Message
+from agent_memory.llm.message import SystemMessage
+from agent_memory.llm.message import ToolCall
+from agent_memory.llm.message import ToolMessage
 
 
 def to_llm_tool_call(tool_call: ConversationToolCall) -> ToolCall:

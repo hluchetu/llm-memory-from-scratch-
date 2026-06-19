@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.context.conversation.state import Message
-from llm_memory.context.conversation.state import SummaryItem
-from llm_memory.storage.memory import MemoryStorage
+from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.context.conversation.state import Message
+from agent_memory.context.conversation.state import SummaryItem
+from agent_memory.storage.memory import MemoryStorage
 
 
 def main() -> None:

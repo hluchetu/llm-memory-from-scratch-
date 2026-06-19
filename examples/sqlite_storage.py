@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.storage.sqlite import SQLiteStorage
+from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.storage.sqlite import SQLiteStorage
 
 
 def main() -> None:

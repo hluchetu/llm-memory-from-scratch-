@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.storage.json import JsonStorage
+from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.storage.json import JsonStorage
 
 
 def main() -> None:

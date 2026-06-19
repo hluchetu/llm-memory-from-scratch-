@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from llm_memory.context.conversation.memory import ConversationMemory
-from llm_memory.context.conversation.processors import FilterByRoleProcessor
-from llm_memory.context.conversation.processors import KeepRecentMessagesProcessor
-from llm_memory.context.conversation.processors import ProcessorPipeline
-from llm_memory.storage.memory import MemoryStorage
+from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.context.conversation.processors import FilterByRoleProcessor
+from agent_memory.context.conversation.processors import KeepRecentMessagesProcessor
+from agent_memory.context.conversation.processors import ProcessorPipeline
+from agent_memory.storage.memory import MemoryStorage
 
 
 def main() -> None:

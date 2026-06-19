@@ -5,10 +5,10 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from llm_memory.context.conversation.state import ConversationItem
-from llm_memory.context.conversation.state import ConversationState
-from llm_memory.context.conversation.state import Message
-from llm_memory.context.conversation.state import SummaryItem
+from agent_memory.context.conversation.state import ConversationItem
+from agent_memory.context.conversation.state import ConversationState
+from agent_memory.context.conversation.state import Message
+from agent_memory.context.conversation.state import SummaryItem
 
 
 class SQLiteStorage:
