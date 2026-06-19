@@ -12,6 +12,16 @@ agents need different memory layers for different jobs
 
 Conversation history, summaries, user preferences, project decisions, semantic facts, episodic events, and procedural rules should not be treated as one vague blob of chat history. They need clear models, storage boundaries, and retrieval strategies.
 
+## Architecture Docs
+
+Start with the short-term memory architecture:
+
+[Short-Term Memory](docs/short-term-memory.md)
+
+Then read the long-term memory direction:
+
+[Long-Term Memory](docs/long-term-memory.md)
+
 ## Capabilities
 
 Implemented now:
