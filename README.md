@@ -1,322 +1,85 @@
-# Agent Memory From Scratch
+# agent-memory-from-scratch
 
-An experimental Python implementation of memory architecture for AI agents, built from scratch.
+Memory architecture for AI agents, built from first principles.
 
-The purpose of this repo is to explore how memory systems for AI agents should be designed when they need to survive beyond a single prompt. It starts with the foundations: conversation state, persistence, context trimming, summarization, and model-facing message boundaries. From there, it will grow into long-term memory, semantic retrieval, profile memory, knowledge ingestion, caching, multi-agent shared memory, and other capabilities as agent memory patterns continue to evolve.
+This repo builds agent memory layer by layer — conversation threads, context trimming, summarization, persistent storage, and long-term memory — without reaching for a managed provider until the architecture is clear. The goal is to understand what memory needs to do before deciding what should do it.
 
-The project is organized around one simple idea:
+An article covering the thinking behind this project is at [hluchetu.dev](https://hluchetu.dev).
 
-```text
-agents need different memory layers for different jobs
-```
-
-Conversation history, summaries, user preferences, project decisions, semantic facts, episodic events, and procedural rules should not be treated as one vague blob of chat history. They need clear models, storage boundaries, and retrieval strategies.
-
-## Architecture Docs
-
-Start with the short-term memory architecture:
-
-[Short-Term Memory](docs/short-term-memory.md)
-
-Then read the long-term memory direction:
-
-[Long-Term Memory](docs/long-term-memory.md)
-
-## Capabilities
-
-Implemented now:
-
-```text
-persistent conversation memory across sessions
-thread-scoped short-term memory
-token-budget context trimming
-summary-based context compression
-persisted summaries as derived timeline items
-in-process, JSON, Markdown, SQLite, and cached storage
-provider-neutral LLM message boundary
-YAML prompt loading
-```
-
-Planned capabilities:
-
-```text
-long-term MemoryRecord store
-semantic retrieval with embeddings and vector search
-keyword, vector, time, and graph retrieval strategies
-memory extraction from conversations into semantic, episodic, procedural, preference, and decision records
-profile-style entity memory for durable user or project facts
-knowledge base ingestion for files and folders
-configurable chunking for ingested documents
-semantic cache to reduce repeated LLM calls
-multi-agent shared memory / blackboard patterns
-context-window telemetry and budget reporting
-tool-call memory records
-integrations for external memory systems
-```
-
-The repo intentionally starts with primitives before integrations. The goal is to understand and own the architecture before plugging in vector databases, external memory systems, agent frameworks, or UI layers.
-
-## Memory Layers
-
-```mermaid
-flowchart TB
-    Agent["AI agent"] --> ShortTerm["Short-term memory"]
-    Agent --> LongTerm["Long-term memory"]
-
-    ShortTerm --> Conversation["Conversation timeline"]
-    ShortTerm --> Summary["Summary context"]
-    ShortTerm --> Trimming["Token-budget trimming"]
-
-    LongTerm --> Records["MemoryRecord store"]
-    LongTerm --> Retrieval["Retrieval strategies"]
-
-    Retrieval --> Keyword["Keyword"]
-    Retrieval --> Vector["Vector"]
-    Retrieval --> Time["Time"]
-    Retrieval --> Graph["Graph"]
-```
-
-Short-term memory answers:
-
-```text
-What happened in this thread?
-```
-
-Long-term memory answers:
-
-```text
-What should be reusable later?
-```
-
-## Architecture Principles
-
-The codebase separates concepts that are often mixed together:
-
-```text
-context    -> what the agent/model should know
-storage    -> where memory is persisted
-retrieval  -> how memory is searched
-llm        -> provider-neutral model messages and invocation
-prompts    -> versioned prompt templates
-```
-
-The short-term memory implementation already follows this boundary:
-
-```mermaid
-flowchart LR
-    App["Application"] --> Context["context/conversation"]
-    Context --> Storage["storage"]
-    Context --> Processors["processors"]
-    Processors --> LLM["llm"]
-    Prompts["prompts"] --> Processors
-```
-
-Long-term memory follows the same principle:
-
-```text
-MemoryRecord is the source of truth.
-Retrievers make records searchable.
-```
-
-Vectors, keyword search, graph edges, and timestamps are retrieval structures. They are not the memory itself.
-
-## Repository Shape
-
-```text
-src/agent_memory/
-  context/
-    conversation/     # short-term conversation memory
-    profile/          # reserved for profile memory
-    semantic/         # reserved for semantic memory concepts
-
-  storage/            # persistence backends
-  llm/                # provider-neutral LLM boundary
-  prompts/            # YAML prompt templates
-  long_term/          # long-term memory records, store protocol, retrievers
-  retrieval/          # keyword, vector, time, and graph retrieval strategies
-  ingestion/          # file/source loading into memory records
-  integrations/       # external memory systems such as Mem0 or Zep
-  settings.py
-  errors.py
-
-docs/
-  short-term-memory.md
-  long-term-memory.md
-```
-
-## Implemented
-
-Short-term memory foundation:
-
-```text
-ConversationState
-ConversationMemory
-Message
-SummaryItem
-ConversationStorage protocol
-```
-
-Context management:
-
-```text
-token-budget trimming
-summary-based compression
-summary persistence as derived timeline items
-```
-
-Storage:
-
-```text
-in-process storage
-JSON storage
-Markdown storage
-SQLite storage
-cached storage composition
-```
-
-LLM boundary:
-
-```text
-SystemMessage
-HumanMessage
-AIMessage
-ToolMessage
-ChatModel protocol
-internal-to-LLM message adapters
-```
-
-Prompt management:
-
-```text
-YAML prompt files
-prompt loader
-conversation summary prompt
-```
-
-## Long-Term Memory Direction
-
-Long-term memory will use one record model:
-
-```text
-namespace + key + value + memory_type + metadata
-```
-
-Memory categories are represented by `memory_type`:
-
-```text
-semantic
-episodic
-procedural
-preference
-decision
-```
-
-Retrieval is handled through strategies:
-
-```text
-keyword retrieval
-vector retrieval
-time retrieval
-graph / relationship retrieval
-```
-
-This avoids creating separate memory systems too early while still supporting production retrieval patterns.
-
-## Documentation
-
-Start here:
-
-[Short-Term Memory](docs/short-term-memory.md)
-
-Explains thread-scoped conversation memory, token-budget trimming, summary compression, persisted summaries, storage backends, and the LLM boundary.
-
-[Long-Term Memory](docs/long-term-memory.md)
-
-Explains the planned long-term architecture: `MemoryRecord` source of truth, retrieval strategies, semantic memory, episodic memory, procedural memory, preference memory, and decision memory.
-
-## Run The Chat
-
-The package exposes a command-line chat backed by conversation memory.
-The CLI is the main entrypoint for running the project locally:
+## Quick Start
 
 ```bash
 cp .env.example .env
 ```
 
-Set `AGENT_MEMORY_MODEL_API_KEY` in `.env`, then run:
+Set your model credentials in `.env`, then start a conversation:
 
 ```bash
-PYTHONPATH=src python -m agent_memory chat thread-bank
-```
-
-DeepSeek uses the OpenAI-compatible chat-completions client:
-
-```text
-AGENT_MEMORY_MODEL_PROVIDER=deepseek
-AGENT_MEMORY_MODEL_NAME=deepseek-chat
-AGENT_MEMORY_MODEL_BASE_URL=https://api.deepseek.com
-AGENT_MEMORY_MODEL_API_KEY=...
-```
-
-Anthropic uses its own Messages API client:
-
-```text
-AGENT_MEMORY_MODEL_PROVIDER=anthropic
-AGENT_MEMORY_MODEL_NAME=claude-sonnet-4-5
-AGENT_MEMORY_MODEL_BASE_URL=https://api.anthropic.com
-AGENT_MEMORY_MODEL_API_KEY=...
-AGENT_MEMORY_ANTHROPIC_VERSION=2023-06-01
-```
-
-The chat command:
-
-```text
-loads previous messages for the thread
-sends the thread context to the configured chat model
-stores the user message
-stores the assistant response
-keeps the conversation available across CLI runs
+PYTHONPATH=src python -m agent_memory chat my-thread
 ```
 
 Inspect or clear a thread:
 
 ```bash
-PYTHONPATH=src python -m agent_memory show-thread thread-bank
-PYTHONPATH=src python -m agent_memory clear-thread thread-bank
+PYTHONPATH=src python -m agent_memory show-thread my-thread
+PYTHONPATH=src python -m agent_memory clear-thread my-thread
 ```
 
-## Local Memory Directory
-
-`.memory/` is the local persistence directory.
-
-By default, the CLI stores conversation memory in:
-
-```text
-.memory/conversations.db
-```
-
-That SQLite database is what makes the chat remember previous turns after
-the process exits. Use `--database-path` to point the CLI at a different
-database:
+Supported providers:
 
 ```bash
-PYTHONPATH=src python -m agent_memory --database-path .memory/dev.db show-thread thread-bank
+# DeepSeek
+AGENT_MEMORY_MODEL_PROVIDER=deepseek
+AGENT_MEMORY_MODEL_NAME=deepseek-chat
+AGENT_MEMORY_MODEL_BASE_URL=https://api.deepseek.com
+AGENT_MEMORY_MODEL_API_KEY=...
+
+# Anthropic
+AGENT_MEMORY_MODEL_PROVIDER=anthropic
+AGENT_MEMORY_MODEL_NAME=claude-sonnet-4-5
+AGENT_MEMORY_MODEL_API_KEY=...
 ```
 
-`.memory/` is ignored by git because it contains local runtime state, not
-source code.
+## What Is Built
 
-## Roadmap
+- Typed, immutable conversation events — messages, tool calls, tool results, summaries
+- Thread-scoped conversation memory with pluggable storage
+- Context trimming by token budget, preserving system messages and tool interaction groups
+- Tool interaction compaction — collapses old tool calls into a single summary line
+- LLM-based summarization of old messages
+- Persisted summaries as derived timeline items
+- Storage backends: in-memory, SQLite, JSON, Markdown, cached composition
+- Provider-neutral LLM message boundary — internal messages stay separate from model messages
+- Long-term memory records with namespace, key, typed value, and pluggable retrieval
+- CLI with persistent conversation memory across runs
 
-Next major work:
+## What Is Planned
 
-```text
-long-term MemoryRecord model
-long-term memory store protocol
-keyword retriever
-vector retriever with pluggable embeddings
-memory extraction from conversation messages
-retrieval across namespaces
+- Semantic retrieval with embeddings and vector search
+- Keyword, time, and graph retrieval strategies
+- Memory extraction from conversations into typed long-term records
+- Profile memory for durable user and project facts
+- Knowledge base ingestion from files and folders
+- Provider integrations — Mem0, Zep, LangMem
+- Context window telemetry and budget reporting
+- Multi-agent shared memory
+
+## Architecture
+
+```
+src/agent_memory/
+  context/conversation/   # short-term conversation memory
+  storage/                # persistence backends
+  long_term/              # long-term memory records and retrieval
+  llm/                    # provider-neutral model boundary
+  prompts/                # YAML prompt templates
+  retrieval/              # retrieval strategies (in progress)
+  ingestion/              # source ingestion (in progress)
+  integrations/           # external providers (in progress)
+  agent/                  # minimal agent using the memory layer (in progress)
 ```
 
-The intent is to build the memory system from first principles while keeping the architecture compatible with how modern agent frameworks separate state, persistence, retrieval, and model context.
+## Docs
+
+- [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
+- [Long-Term Memory](docs/long-term-memory.md) — memory records, retrieval strategies, memory types
