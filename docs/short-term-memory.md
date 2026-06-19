@@ -1,93 +1,57 @@
-# Short-Term Memory Architecture
+# Short-Term Memory
 
-This module implements short-term conversation memory: the thread-scoped state required to continue a conversation across turns.
+Short-term memory is the thread-scoped conversation state an agent needs while continuing a conversation.
 
-The design goal is intentionally narrow:
-
-```text
-Persist the ordered conversation timeline for a thread,
-without coupling the conversation API to a specific storage backend.
-```
-
-This is not a LangGraph checkpointer and it is not long-term semantic memory. It is the conversation-history layer that higher-level agent, summary, and long-term memory systems can build on.
-
-## Core Model
-
-Short-term memory is modeled with three layers:
+In this repo, short-term memory is deliberately narrow:
 
 ```text
-Data model      -> Message, ConversationState
-Application API -> ConversationMemory
-Storage contract -> ConversationStorage
+persist the ordered conversation timeline
+prepare a smaller model context before invocation
+keep storage separate from prompt construction
 ```
 
-The separation matters:
+It is not long-term memory. It does not decide what facts should be remembered across projects, users, or future sessions. Long-term memory is covered in [long-term-memory.md](long-term-memory.md).
+
+## Core Ideas
+
+Short-term memory answers:
 
 ```text
-Message and ConversationState define what is stored.
-ConversationMemory defines how application code interacts with memory.
-ConversationStorage defines where and how memory is persisted.
+What happened in this thread?
 ```
 
-```mermaid
-flowchart TB
-    App["Application / agent"] --> Memory["ConversationMemory"]
-    Memory --> State["ConversationState"]
-    State --> Items["ConversationItem timeline"]
-    Items --> Message["Message"]
-    Items --> Summary["SummaryItem"]
-    Memory --> Storage["ConversationStorage"]
-    Storage --> Backend["Memory / JSON / Markdown / SQLite / cached"]
-```
-
-Model-facing messages are kept separate from stored conversation items:
+The implementation has three main parts:
 
 ```text
-conversation.state.Message -> internal persisted conversation message
-llm.message.Message        -> provider-neutral message sent to a chat model
-llm.adapters               -> conversion boundary
+ConversationState   -> stored timeline shape
+ConversationMemory  -> application-facing API
+ConversationStorage -> persistence contract
 ```
 
-## Thread Identity
-
-A `thread_id` identifies one conversation timeline.
-
-Examples:
+The important separation:
 
 ```text
-thread-rag
-thread-memory
-support-case-123
+state      = what memory looks like
+memory API = how application code writes/reads it
+storage   = where it is persisted
+processors = what context is sent to the model
 ```
 
-Using the same `thread_id` continues the same conversation. Using a different `thread_id` starts or reads a different conversation.
+## Data Model
 
-This is the same architectural role as a conversation ID in many LLM systems: it scopes short-term state without implying that everything in the thread should become long-term memory.
+The stored timeline is made of `ConversationItem` objects.
 
-## Message
-
-`Message` represents a single conversational message.
-
-Defined in:
+Current item types:
 
 ```text
-src/agent_memory/context/conversation/state.py
+Message
+SummaryItem
+ToolCall
+ToolResult
+RetrievalItem
 ```
 
-Current fields:
-
-```text
-id
-role
-content
-created_at
-run_id
-model_name
-usage
-metadata
-```
-
-Example:
+The most common item is `Message`.
 
 ```python
 Message(
@@ -105,35 +69,18 @@ Message(
 )
 ```
 
-The additional fields make the message useful beyond simple chat replay:
+Why these fields matter:
 
 ```text
-run_id      -> correlates a message with the model/application execution that produced it
-model_name  -> records which model produced the response
-usage       -> stores token or usage accounting
-metadata    -> stores provider-specific or application-specific details
+id          -> stable reference for tracing and summaries
+created_at  -> ordering and observability
+run_id      -> connects a message to an execution/run
+model_name  -> records which model produced an answer
+usage       -> token/cost accounting
+metadata    -> provider or app-specific details
 ```
 
-This mirrors what production LLM systems usually need for tracing, debugging, evaluation, cost analysis, and provider comparison.
-
-## ConversationState
-
-`ConversationState` is the in-memory representation of one thread.
-
-Defined in:
-
-```text
-src/agent_memory/context/conversation/state.py
-```
-
-It contains:
-
-```text
-thread_id
-items
-```
-
-Example:
+`ConversationState` stores ordered items:
 
 ```python
 ConversationState(
@@ -145,30 +92,11 @@ ConversationState(
 )
 ```
 
-`ConversationState` is deliberately passive. It does not know about files, databases, caches, or storage policies. It is just the state shape.
+It also exposes `messages` as a filtered view over `items`.
 
-The `messages` property is a filtered view over `items`. That leaves room for the same conversation timeline to hold tool calls, tool results, retrieval records, and summary records without pretending every context item is a chat message.
+## Conversation API
 
-## ConversationMemory
-
-`ConversationMemory` is the application-facing API.
-
-Defined in:
-
-```text
-src/agent_memory/context/conversation/memory.py
-```
-
-It exposes:
-
-```text
-add_message
-get_messages
-replace_messages
-clear_thread
-```
-
-Example:
+`ConversationMemory` is the public API.
 
 ```python
 memory.add_message(
@@ -176,87 +104,43 @@ memory.add_message(
     role="user",
     content="Explain reranking.",
 )
+
+messages = memory.get_messages("thread-rag")
+items = memory.get_items("thread-rag")
 ```
 
-`ConversationMemory` creates `Message` objects and delegates persistence to the configured storage backend.
+The API creates memory items and delegates persistence to the configured storage backend.
 
-It does not know whether the backend is in-memory, JSON, Markdown, SQLite, cached, or remote. That keeps application code stable while storage choices evolve.
+## Persistence Pattern
 
-## Storage Contract
-
-`ConversationStorage` defines the interface every backend must implement.
-
-Defined in:
+Normal conversation writes are append-first:
 
 ```text
-src/agent_memory/storage/interface.py
+user message received
+append user message
+model produces response
+append assistant message
 ```
 
-The contract is append-first:
+This is better than rewriting the whole conversation on every turn.
+
+The storage contract supports:
 
 ```text
 get
 create_thread
 append_message
+append_item
+replace_items
 replace_messages
 delete
 ```
 
-The most important method is:
-
-```text
-append_message
-```
-
-Normal chat writes should append a single message. They should not rewrite the entire conversation on every turn.
-
-`replace_messages` exists, but it is reserved for intentional state rewrites such as trimming, compaction, summarization, or manual correction.
-
-## Persistence Point
-
-Short-term memory is persisted when a meaningful conversation event happens.
-
-For a normal turn:
-
-```text
-1. User message is received
-2. Append user message
-3. Model produces assistant response
-4. Append assistant message
-```
-
-```mermaid
-sequenceDiagram
-    participant App
-    participant Memory as ConversationMemory
-    participant Storage as ConversationStorage
-    participant Model as ChatModel
-
-    App->>Memory: add_message(user)
-    Memory->>Storage: append_message(user)
-    App->>Model: invoke(model context)
-    Model-->>App: AIMessage
-    App->>Memory: add_message(assistant)
-    Memory->>Storage: append_message(assistant)
-```
-
-In this codebase, that persistence point is:
-
-```python
-ConversationMemory.add_message(...)
-```
-
-Internally, it calls:
-
-```python
-self._storage.append_message(...)
-```
-
-This gives the system crash-friendly behavior: if the model call fails after the user message is received, the user message can still be preserved.
+`replace_*` methods exist for explicit rewrites, but ordinary chat should append.
 
 ## Storage Backends
 
-The current storage implementations are:
+Current backends:
 
 ```text
 MemoryStorage
@@ -266,186 +150,84 @@ SQLiteStorage
 CachedConversationStorage
 ```
 
-Each backend implements the same `ConversationStorage` contract.
+Tradeoffs:
 
-### MemoryStorage
+| Backend | Good For | Limitation |
+| --- | --- | --- |
+| `MemoryStorage` | tests, examples, runtime cache | lost on process restart |
+| `JsonStorage` | simple local persistence | weak for concurrency |
+| `MarkdownStorage` | human/LLM-readable traces | weaker structured querying |
+| `SQLiteStorage` | local durable structured storage | not distributed |
+| `CachedConversationStorage` | fast reads with durable primary storage | cache invalidation needs care |
 
-Defined in:
+The storage API keeps `ConversationMemory` stable while persistence changes.
 
-```text
-src/agent_memory/storage/memory.py
-```
+## Context Processing
 
-Stores conversation state in Python memory.
+Stored conversation history is not the same thing as model context.
 
-This backend is fast and useful for runtime caching, examples, and tests. It is not persistent across process restarts.
+The storage layer can keep the full timeline, while processors decide what subset should be sent to the model.
 
-### JsonStorage
-
-Defined in:
-
-```text
-src/agent_memory/storage/json.py
-```
-
-Stores conversation state in a JSON file.
-
-This backend is useful for local structured persistence and inspection. It is simple and transparent, but not designed for high-concurrency workloads.
-
-### MarkdownStorage
-
-Defined in:
+Current processors:
 
 ```text
-src/agent_memory/storage/markdown.py
-```
-
-Stores conversation state as Markdown.
-
-This backend optimizes for readability. It is useful when conversation traces should be easy for humans or LLMs to inspect directly.
-
-### SQLiteStorage
-
-Defined in:
-
-```text
-src/agent_memory/storage/sqlite.py
-```
-
-Stores conversation state in SQLite using a normalized schema:
-
-```text
-conversations
-conversation_items
-```
-
-`conversations` stores the thread-level record.
-
-`conversation_items` stores ordered items inside the conversation.
-
-The item table currently supports these item types:
-
-```text
-message
-tool_call
-tool_result
-retrieval
-summary
-```
-
-The Python API currently writes message items. The schema is intentionally broader because modern LLM conversations are not only user and assistant messages; they also include tool calls, tool outputs, retrieved context, summaries, and execution metadata.
-
-### CachedConversationStorage
-
-Defined in:
-
-```text
-src/agent_memory/storage/cached.py
-```
-
-Combines a fast cache backend with a primary backend:
-
-```python
-storage = CachedConversationStorage(
-    cache=MemoryStorage(),
-    primary=SQLiteStorage(path=".memory/conversations.db"),
-)
-```
-
-Read path:
-
-```text
-1. Read from cache
-2. If present, return cached state
-3. If missing, read from primary
-4. Populate cache
-5. Return state
-```
-
-Write path:
-
-```text
-1. Write to primary
-2. Update cache
-```
-
-The primary backend remains the source of truth. The cache is an optimization layer.
-
-This is intentionally similar to common cache-aside/write-through patterns used in application storage systems.
-
-## SQLite Schema
-
-SQLite stores conversation memory as a conversation plus ordered items.
-
-Conceptual schema:
-
-```text
-conversations
-  id
-  created_at
-  updated_at
-  metadata
-
-conversation_items
-  id
-  conversation_id
-  item_type
-  position
-  role
-  content
-  created_at
-  run_id
-  model_name
-  usage
-  metadata
-```
-
-The `position` column preserves conversational order.
-
-The `conversation_id` foreign key connects each item to its parent conversation.
-
-`run_id`, `model_name`, `usage`, and `metadata` support tracing and observability.
-
-## Message History Processing
-
-Conversation storage is not the same thing as prompt construction.
-
-The storage layer can keep the full short-term timeline, while processors decide what subset should be sent to a model.
-
-Defined in:
-
-```text
-src/agent_memory/context/conversation/processors.py
-```
-
-Current processors include:
-
-```text
-KeepWithinTokenBudgetProcessor
 FilterByRoleProcessor
+KeepWithinTokenBudgetProcessor
 SummarizeOldMessagesProcessor
 ProcessorPipeline
 ```
 
-This separation is important because model context should be selected intentionally. Persisting every message does not mean every message must be sent back to the model on every turn.
+## Strategy 1: Role Filtering
 
-### Token Budget Trimming
+`FilterByRoleProcessor` keeps only allowed message roles.
 
-`KeepWithinTokenBudgetProcessor` keeps recent context within a model token budget.
+```python
+processor = FilterByRoleProcessor(
+    allowed_roles={"user", "assistant"},
+)
+```
 
-This is preferred over message-count trimming because one message can be tiny:
+Useful when tool outputs, system messages, or internal messages should not be sent to the model for a specific call.
+
+Pros:
+
+```text
+simple
+predictable
+useful for privacy or role-specific context
+```
+
+Cons:
+
+```text
+can remove important tool context
+must be careful with assistant/tool call pairing
+```
+
+Future improvements:
+
+```text
+role filtering should understand tool call groups
+role filtering could be policy-driven per model/provider
+```
+
+## Strategy 2: Token-Budget Trimming
+
+`KeepWithinTokenBudgetProcessor` trims by token budget, not message count.
+
+This matters because one message can be tiny:
 
 ```text
 yes
 ```
 
-or extremely large:
+or huge:
 
 ```text
-Here is a long traceback...
+Here is a 2,000-line traceback...
 ```
 
-The processor does not guess tokenization. It receives a `TokenCounter`, so production code can use the tokenizer for the model being called.
+The processor uses an injected `TokenCounter` so production code can use a model-specific tokenizer.
 
 ```python
 class TokenCounter(Protocol):
@@ -453,125 +235,215 @@ class TokenCounter(Protocol):
         ...
 ```
 
-The trimming strategy is:
+Example:
 
-```text
-1. Preserve leading system messages when configured.
-2. Walk backward from the newest messages.
-3. Keep adding message groups while the token budget allows.
-4. Return the selected messages in original order.
+```python
+class WhitespaceTokenCounter:
+    def count_message(self, message: Message) -> int:
+        return len(message.content.split()) + 1
+
+
+processor = KeepWithinTokenBudgetProcessor(
+    max_tokens=8000,
+    token_counter=model_token_counter,
+)
 ```
 
-Assistant messages with tool calls are grouped with following tool result messages. That prevents trimming from leaving a tool result without the assistant tool call that produced it.
-
-```mermaid
-flowchart LR
-    Messages["Stored messages"] --> Counter["TokenCounter"]
-    Messages --> Processor["KeepWithinTokenBudgetProcessor"]
-    Counter --> Processor
-    Processor --> System["Preserved system messages"]
-    Processor --> Recent["Newest messages within budget"]
-    System --> Context["Model context"]
-    Recent --> Context
-```
-
-### Conversation Summary Processing
-
-`SummarizeOldMessagesProcessor` compresses older messages before model invocation.
-
-It does not delete the stored conversation. It only prepares a smaller model context:
+How it works:
 
 ```text
-summary of older messages
-+
+preserve leading system messages when configured
+walk backward from newest messages
+keep adding message groups while the budget allows
+return selected messages in original order
+```
+
+It also groups assistant messages with following tool result messages when the assistant message has tool calls. That avoids sending broken tool-call history to providers.
+
+Pros:
+
+```text
+closer to production reality than max message count
+model tokenizer can be injected
+preserves newest context
+protects system messages
+keeps assistant/tool result groups together
+```
+
+Cons:
+
+```text
+depends on a correct token counter
+can still drop older important facts
+does not summarize what it drops
+```
+
+Future improvements:
+
+```text
+use provider-specific token counters
+reserve output tokens explicitly
+reserve tokens for retrieved documents and long-term memories
+add telemetry showing used/remaining context budget
+support multimodal token accounting
+```
+
+## Strategy 3: Summary Compression
+
+`SummarizeOldMessagesProcessor` summarizes older messages and keeps recent messages raw.
+
+```python
+processor = SummarizeOldMessagesProcessor(
+    model=summary_model,
+    trigger_message_count=8,
+    keep_recent_messages=4,
+)
+
+model_context = processor.process(
+    messages=memory.get_messages("thread-1"),
+    context=ProcessingContext(),
+)
+```
+
+The output shape:
+
+```text
+system summary message
 recent raw messages
 ```
 
-```mermaid
-flowchart LR
-    Stored["Stored raw messages"] --> Processor["SummarizeOldMessagesProcessor"]
-    Processor --> Old["Older messages"]
-    Processor --> Recent["Recent raw messages"]
-    Old --> SummaryModel["Summary ChatModel"]
-    SummaryModel --> Summary["System summary message"]
-    Summary --> Context["Model context"]
-    Recent --> Context
-```
+The processor does not delete stored messages. It only prepares model context.
 
-The summary prompt is stored separately from code:
+The summary prompt lives in:
 
 ```text
 src/agent_memory/prompts/conversation_summary.yaml
 ```
 
-The processor loads the prompt through:
+Pros:
 
 ```text
-src/agent_memory/prompts/loader.py
+keeps useful older context in compressed form
+reduces model input size
+preserves raw messages in storage
+prompt is versioned outside code
 ```
 
-This follows the same pattern as the agentic RAG repo: prompts are versioned text assets, while processors contain orchestration logic.
-
-The summary message includes metadata:
+Cons:
 
 ```text
-kind = conversation_summary
-covered_item_ids = ids of items summarized
+summary quality depends on the summarizer model
+summaries can lose details
+summaries can introduce mistakes if the model is careless
+extra model call adds latency and cost
 ```
 
-That metadata makes it possible to trace which original messages were compressed into the summary.
-
-## Persisted Summaries
-
-Summaries can also be saved back into the conversation timeline as `SummaryItem`.
-
-This does not make the summary the source of truth. The source of truth remains the raw conversation messages.
-
-The stored timeline can contain both:
+Future improvements:
 
 ```text
-Message
-Message
-Message
-SummaryItem
-Message
-Message
+structured summary output
+summary quality checks
+incremental rolling summaries
+domain-specific summary prompts
+summary evaluation against raw history
 ```
 
-```mermaid
-flowchart TB
-    Timeline["Conversation timeline"] --> M1["Message"]
-    Timeline --> M2["Message"]
-    Timeline --> M3["Message"]
-    Timeline --> S1["SummaryItem"]
-    Timeline --> M4["Message"]
-    Timeline --> M5["Message"]
+## Strategy 4: Persisted Summaries
 
-    S1 -. covers .-> M1
-    S1 -. covers .-> M2
-    S1 -. covers .-> M3
+Summaries can be saved back into the timeline as `SummaryItem`.
+
+```python
+memory.add_summary(
+    thread_id="thread-1",
+    content="The user is building an agent memory system.",
+    covered_item_ids=[
+        "message-id-1",
+        "message-id-2",
+    ],
+)
 ```
 
-This gives the system two useful views:
+This does not make the summary the source of truth.
+
+The source of truth remains the raw conversation messages.
+
+Persisted summaries are derived context:
 
 ```text
-raw messages       -> audit, replay, debugging, evaluation
-summary items      -> cheaper model context, faster continuation
+raw messages  -> audit, replay, debugging, evaluation
+SummaryItem   -> cheaper context, faster continuation
 ```
 
-`ConversationMemory.add_summary(...)` persists a summary as a derived timeline item.
-
-The summary records which items it covers:
+Pros:
 
 ```text
-covered_item_ids
+summary is traceable through covered_item_ids
+raw messages remain available
+can avoid regenerating the same summary repeatedly
+fits the conversation timeline model
 ```
 
-That makes the summary traceable. A reviewer can see exactly which earlier items were compressed into it.
+Cons:
+
+```text
+requires policy for when to create summaries
+requires policy for which summary to use later
+can create redundant summaries without deduplication
+```
+
+Future improvements:
+
+```text
+summary reuse policy
+summary invalidation when old messages change
+compaction telemetry
+summary lineage tracking
+```
+
+## Strategy 5: Processor Pipeline
+
+`ProcessorPipeline` chains processors.
+
+```python
+processor = ProcessorPipeline(
+    processors=[
+        FilterByRoleProcessor(allowed_roles={"user", "assistant"}),
+        KeepWithinTokenBudgetProcessor(
+            max_tokens=8000,
+            token_counter=model_token_counter,
+        ),
+    ]
+)
+```
+
+Pros:
+
+```text
+processors stay small
+processing order is explicit
+easy to compose filtering, trimming, and summarization
+```
+
+Cons:
+
+```text
+processor order matters
+bad ordering can drop context before summarization sees it
+pipeline needs stronger validation as it grows
+```
+
+Future improvements:
+
+```text
+named processing profiles
+pipeline validation
+before/after processor telemetry
+provider-specific processing presets
+```
 
 ## LLM Boundary
 
-The conversation state is richer than the payload sent to a model.
+Stored conversation messages are not the same as provider/model messages.
 
 Stored messages include:
 
@@ -585,7 +457,7 @@ metadata
 tool_calls
 ```
 
-LLM-facing messages are intentionally smaller and follow a LangChain-style naming convention:
+Model-facing messages use:
 
 ```text
 SystemMessage
@@ -595,124 +467,26 @@ ToolMessage
 ToolCall
 ```
 
-Defined in:
-
-```text
-src/agent_memory/llm/message.py
-```
-
-The chat model interface is:
-
-```text
-ChatModel.invoke(messages) -> AIMessage
-```
-
-Defined in:
-
-```text
-src/agent_memory/llm/interface.py
-```
-
-Adapters convert internal messages to LLM-facing messages:
+The adapter boundary is:
 
 ```text
 src/agent_memory/llm/adapters.py
 ```
 
-This boundary keeps provider/model concerns out of the stored conversation state.
+This keeps provider concerns out of stored conversation state.
 
-## Relationship To LangGraph
+## What To Improve Next
 
-This project does not implement LangGraph checkpoints.
-
-LangGraph checkpointers persist graph execution state. That state can include messages, but it can also include routing decisions, tool outputs, intermediate node state, retries, and other graph-level data.
-
-This project implements a lower-level conversation memory layer:
+The important next improvements are:
 
 ```text
-thread_id -> ordered conversation items
+real provider-specific token counters
+context-window telemetry
+summary reuse policy
+tool-call aware role filtering
+structured summarization
+long-term memory extraction from short-term history
 ```
 
-The concepts are compatible:
+Short-term memory should remain focused on thread state and model-context preparation. Facts, preferences, decisions, and reusable knowledge should move into long-term memory.
 
-```text
-thread_id
-state
-messages
-storage backend
-```
-
-But the scope is different:
-
-```text
-ConversationMemory -> conversation history
-LangGraph checkpointer -> graph execution state
-Long-term memory store -> durable knowledge across threads
-```
-
-Keeping those boundaries separate makes the system easier to extend.
-
-## Design Decisions
-
-### Append-first writes
-
-Normal conversation events are appended one at a time.
-
-This avoids rewriting the full thread for every new message and keeps the persistence model aligned with how conversations actually happen.
-
-### Storage interface before storage choice
-
-`ConversationMemory` depends on the `ConversationStorage` protocol, not on SQLite, JSON, or Markdown directly.
-
-That makes it possible to move from local storage to Postgres, Redis, or another backend without rewriting the application API.
-
-### Cache as a wrapper
-
-Caching is implemented as `CachedConversationStorage`, not embedded into `ConversationMemory`.
-
-That keeps caching optional and composable.
-
-### Message metadata is first-class
-
-Model name, run ID, usage, and metadata are part of the message model because production LLM systems need traceability.
-
-Without those fields, it becomes difficult to debug which model produced a message, compare model behavior, analyze cost, or evaluate runs.
-
-## Current Capabilities
-
-Short-term memory currently supports:
-
-```text
-thread-scoped conversations
-append-first message persistence
-multiple interchangeable storage backends
-cache + primary storage composition
-message metadata and usage tracking
-message history processors
-model-message adapters
-SQLite conversation item schema
-```
-
-## Next Extensions
-
-The schema already anticipates richer conversation items.
-
-Natural next steps:
-
-```text
-add_tool_call
-add_tool_result
-add_retrieval
-add_summary
-windowed reads
-summary memory
-long-term semantic memory
-```
-
-These should build on the existing boundary:
-
-```text
-ConversationMemory for API
-ConversationStorage for persistence
-Message/ConversationState for data shape
-```
