@@ -234,18 +234,77 @@ Explains thread-scoped conversation memory, token-budget trimming, summary compr
 
 Explains the planned long-term architecture: `MemoryRecord` source of truth, retrieval strategies, semantic memory, episodic memory, procedural memory, preference memory, and decision memory.
 
-## Examples
+## Run The Chat
+
+The package exposes a command-line chat backed by conversation memory.
+The CLI is the main entrypoint for running the project locally:
 
 ```bash
-PYTHONPATH=src python examples/conversation_memory.py
-PYTHONPATH=src python examples/conversation_summary.py
-PYTHONPATH=src python examples/persisted_summary.py
-PYTHONPATH=src python examples/process_and_persist_summary.py
-PYTHONPATH=src python examples/json_storage.py
-PYTHONPATH=src python examples/markdown_storage.py
-PYTHONPATH=src python examples/sqlite_storage.py
-PYTHONPATH=src python examples/cached_storage.py
+cp .env.example .env
 ```
+
+Set `AGENT_MEMORY_MODEL_API_KEY` in `.env`, then run:
+
+```bash
+PYTHONPATH=src python -m agent_memory chat thread-bank
+```
+
+DeepSeek uses the OpenAI-compatible chat-completions client:
+
+```text
+AGENT_MEMORY_MODEL_PROVIDER=deepseek
+AGENT_MEMORY_MODEL_NAME=deepseek-chat
+AGENT_MEMORY_MODEL_BASE_URL=https://api.deepseek.com
+AGENT_MEMORY_MODEL_API_KEY=...
+```
+
+Anthropic uses its own Messages API client:
+
+```text
+AGENT_MEMORY_MODEL_PROVIDER=anthropic
+AGENT_MEMORY_MODEL_NAME=claude-sonnet-4-5
+AGENT_MEMORY_MODEL_BASE_URL=https://api.anthropic.com
+AGENT_MEMORY_MODEL_API_KEY=...
+AGENT_MEMORY_ANTHROPIC_VERSION=2023-06-01
+```
+
+The chat command:
+
+```text
+loads previous messages for the thread
+sends the thread context to the configured chat model
+stores the user message
+stores the assistant response
+keeps the conversation available across CLI runs
+```
+
+Inspect or clear a thread:
+
+```bash
+PYTHONPATH=src python -m agent_memory show-thread thread-bank
+PYTHONPATH=src python -m agent_memory clear-thread thread-bank
+```
+
+## Local Memory Directory
+
+`.memory/` is the local persistence directory.
+
+By default, the CLI stores conversation memory in:
+
+```text
+.memory/conversations.db
+```
+
+That SQLite database is what makes the chat remember previous turns after
+the process exits. Use `--database-path` to point the CLI at a different
+database:
+
+```bash
+PYTHONPATH=src python -m agent_memory --database-path .memory/dev.db show-thread thread-bank
+```
+
+`.memory/` is ignored by git because it contains local runtime state, not
+source code.
 
 ## Roadmap
 

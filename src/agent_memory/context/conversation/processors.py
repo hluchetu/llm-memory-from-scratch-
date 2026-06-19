@@ -158,6 +158,134 @@ class FilterByRoleProcessor:
         ]
 
 
+class CompactToolInteractionsProcessor:
+    def __init__(
+        self,
+        keep_recent_tool_interactions: int,
+        max_tool_result_chars: int = 500,
+    ) -> None:
+        if keep_recent_tool_interactions < 0:
+            raise InvalidProcessorConfigError(
+                "keep_recent_tool_interactions must be greater than or equal to 0."
+            )
+
+        if max_tool_result_chars <= 0:
+            raise InvalidProcessorConfigError(
+                "max_tool_result_chars must be greater than 0."
+            )
+
+        self._keep_recent_tool_interactions = keep_recent_tool_interactions
+        self._max_tool_result_chars = max_tool_result_chars
+
+    def process(
+        self,
+        messages: list[Message],
+        context: ProcessingContext,
+    ) -> list[Message]:
+        units = self._group_message_units(messages)
+        tool_unit_indexes = [
+            index
+            for index, unit in enumerate(units)
+            if self._is_tool_interaction(unit)
+        ]
+        compact_count = max(
+            0,
+            len(tool_unit_indexes) - self._keep_recent_tool_interactions,
+        )
+        compact_unit_indexes = set(tool_unit_indexes[:compact_count])
+        processed_messages: list[Message] = []
+
+        for index, unit in enumerate(units):
+            if index in compact_unit_indexes:
+                processed_messages.append(self._compact_unit(unit))
+                continue
+
+            processed_messages.extend(unit)
+
+        return processed_messages
+
+    def _group_message_units(
+        self,
+        messages: list[Message],
+    ) -> list[list[Message]]:
+        units: list[list[Message]] = []
+        index = 0
+
+        while index < len(messages):
+            message = messages[index]
+            unit = [message]
+            index += 1
+
+            if self._starts_tool_interaction(message):
+                while index < len(messages) and messages[index].role == "tool":
+                    unit.append(messages[index])
+                    index += 1
+
+            units.append(unit)
+
+        return units
+
+    def _is_tool_interaction(self, unit: list[Message]) -> bool:
+        return bool(unit) and self._starts_tool_interaction(unit[0])
+
+    def _starts_tool_interaction(self, message: Message) -> bool:
+        return message.role == "assistant" and bool(message.tool_calls)
+
+    def _compact_unit(self, unit: list[Message]) -> Message:
+        assistant_message = unit[0]
+        tool_messages = unit[1:]
+        covered_item_ids = [
+            message.id
+            for message in unit
+        ]
+        lines = [
+            "Compacted older tool interaction.",
+            "The raw tool call and tool result messages were omitted from model context.",
+            "",
+            "Tool calls:",
+        ]
+
+        for tool_call in assistant_message.tool_calls:
+            lines.append(f"- {tool_call.name}: {tool_call.arguments}")
+
+        if assistant_message.content.strip():
+            lines.extend(
+                [
+                    "",
+                    f"Assistant note: {assistant_message.content.strip()}",
+                ]
+            )
+
+        if tool_messages:
+            lines.extend(
+                [
+                    "",
+                    "Tool results:",
+                ]
+            )
+
+            for message in tool_messages:
+                tool_name = str(message.metadata.get("name", "tool"))
+                lines.append(
+                    f"- {tool_name}: {self._truncate(message.content)}"
+                )
+
+        return Message(
+            role="system",
+            content="\n".join(lines),
+            metadata={
+                "kind": "tool_interaction_compaction",
+                "covered_item_ids": covered_item_ids,
+            },
+        )
+
+    def _truncate(self, text: str) -> str:
+        if len(text) <= self._max_tool_result_chars:
+            return text
+
+        return f"{text[: self._max_tool_result_chars].rstrip()}..."
+
+
 class SummarizeOldMessagesProcessor:
     def __init__(
         self,

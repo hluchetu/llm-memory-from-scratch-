@@ -288,7 +288,70 @@ add telemetry showing used/remaining context budget
 support multimodal token accounting
 ```
 
-## Strategy 3: Summary Compression
+## Strategy 3: Tool Interaction Compaction
+
+`CompactToolInteractionsProcessor` compacts older assistant/tool-result groups before sending context to the model.
+
+It does not delete the raw stored messages. It only changes the model-facing context.
+
+```python
+processor = CompactToolInteractionsProcessor(
+    keep_recent_tool_interactions=2,
+    max_tool_result_chars=500,
+)
+
+model_context = processor.process(
+    messages=memory.get_messages("thread-1"),
+    context=ProcessingContext(),
+)
+```
+
+Before compaction:
+
+```text
+assistant -> called get_transactions
+tool      -> returned a large transaction payload
+assistant -> explained why the card was declined
+```
+
+After compaction for older tool interactions:
+
+```text
+system -> compacted older tool interaction summary
+assistant -> explained why the card was declined
+```
+
+The processor keeps recent tool interactions raw because the model may still need exact tool-call structure for the current turn. Older tool calls and tool results are usually expensive context, especially when tools return large JSON payloads, search results, logs, or transaction lists.
+
+Pros:
+
+```text
+reduces old tool-result noise
+keeps recent tool interactions raw
+preserves raw messages in storage
+tracks compacted message ids in metadata
+works without an extra model call
+```
+
+Cons:
+
+```text
+deterministic compaction is less rich than LLM summarization
+truncated tool results can lose details
+tool-specific compaction policies may be needed later
+```
+
+Future improvements:
+
+```text
+tool-specific compactors
+LLM-based tool result summaries
+structured compaction records
+redaction rules for sensitive tool outputs
+context telemetry for compacted tool tokens
+```
+
+## Strategy 4: Summary Compression
 
 `SummarizeOldMessagesProcessor` summarizes older messages and keeps recent messages raw.
 
@@ -348,7 +411,7 @@ domain-specific summary prompts
 summary evaluation against raw history
 ```
 
-## Strategy 4: Persisted Summaries
+## Strategy 5: Persisted Summaries
 
 Summaries can be saved back into the timeline as `SummaryItem`.
 
@@ -400,14 +463,21 @@ compaction telemetry
 summary lineage tracking
 ```
 
-## Strategy 5: Processor Pipeline
+## Strategy 6: Processor Pipeline
 
 `ProcessorPipeline` chains processors.
 
 ```python
 processor = ProcessorPipeline(
     processors=[
-        FilterByRoleProcessor(allowed_roles={"user", "assistant"}),
+        CompactToolInteractionsProcessor(
+            keep_recent_tool_interactions=2,
+        ),
+        SummarizeOldMessagesProcessor(
+            model=summary_model,
+            trigger_message_count=20,
+            keep_recent_messages=8,
+        ),
         KeepWithinTokenBudgetProcessor(
             max_tokens=8000,
             token_counter=model_token_counter,
@@ -489,4 +559,3 @@ long-term memory extraction from short-term history
 ```
 
 Short-term memory should remain focused on thread state and model-context preparation. Facts, preferences, decisions, and reusable knowledge should move into long-term memory.
-
