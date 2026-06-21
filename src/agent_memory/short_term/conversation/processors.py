@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from agent_memory.context.conversation.state import Message
-from agent_memory.context.conversation.state import MessageRole
+from agent_memory.short_term.conversation.state import Message
+from agent_memory.short_term.conversation.state import MessageRole
 from agent_memory.errors import ContextBudgetExceededError
 from agent_memory.errors import InvalidProcessorConfigError
 from agent_memory.errors import MessageSummarizationError

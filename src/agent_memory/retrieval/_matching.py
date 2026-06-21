@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable
+
+from agent_memory.long_term.episodic.event import EventMemory
+from agent_memory.long_term.item import LongTermRecord
+from agent_memory.long_term.item import MemoryType
+from agent_memory.long_term.procedural.workflow import WorkflowMemory
+from agent_memory.long_term.semantic.entity import EntityMemory
+from agent_memory.long_term.semantic.knowledge import KnowledgeMemory
+
+
+def namespace_matches(
+    item_namespace: tuple[str, ...],
+    search_namespace: tuple[str, ...],
+) -> bool:
+    return item_namespace[: len(search_namespace)] == search_namespace
+
+
+def memory_type_matches(
+    record: LongTermRecord,
+    memory_type: MemoryType | None,
+) -> bool:
+    return memory_type is None or record.memory_type == memory_type
+
+
+def searchable_text(record: LongTermRecord) -> str:
+    metadata_values = " ".join(str(value) for value in record.metadata.values())
+
+    if isinstance(record, KnowledgeMemory):
+        return f"{record.key} {record.content} {record.source or ''} {metadata_values}"
+
+    if isinstance(record, EntityMemory):
+        return f"{record.key} {record.name} {record.description} {metadata_values}"
+
+    if isinstance(record, EventMemory):
+        return (
+            f"{record.key} {record.description} "
+            f"{record.occurred_at.isoformat()} {metadata_values}"
+        )
+
+    if isinstance(record, WorkflowMemory):
+        steps = " ".join(record.steps)
+        return f"{record.key} {steps} {metadata_values}"
+
+    return f"{record.key} {metadata_values}"
+
+
+def tokenize(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def token_overlap_score(query: str, candidates: Iterable[str]) -> float:
+    query_tokens = tokenize(query)
+
+    if not query_tokens:
+        return 0.0
+
+    candidate_tokens: set[str] = set()
+
+    for candidate in candidates:
+        candidate_tokens.update(tokenize(candidate))
+
+    if not candidate_tokens:
+        return 0.0
+
+    overlap = query_tokens.intersection(candidate_tokens)
+    return len(overlap) / len(query_tokens)

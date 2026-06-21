@@ -50,13 +50,13 @@ AGENT_MEMORY_MODEL_API_KEY=...
 - Persisted summaries as derived timeline items
 - Storage backends: in-memory, SQLite, JSON, Markdown, cached composition
 - Provider-neutral LLM message boundary — internal messages stay separate from model messages
-- Long-term memory records with namespace, key, typed value, and pluggable retrieval
+- Long-term typed records with namespace, key, metadata, and pluggable retrieval
 - CLI with persistent conversation memory across runs
 
 ## What Is Planned
 
 - Semantic retrieval with embeddings and vector search
-- Keyword, time, and graph retrieval strategies
+- Time and graph retrieval strategies
 - Memory extraction from conversations into typed long-term records
 - Profile memory for durable user and project facts
 - Knowledge base ingestion from files and folders
@@ -68,9 +68,12 @@ AGENT_MEMORY_MODEL_API_KEY=...
 
 ```
 src/agent_memory/
-  context/conversation/   # short-term conversation memory
+  short_term/conversation/   # short-term conversation memory
   storage/                # persistence backends
-  long_term/              # long-term memory records and retrieval
+  long_term/              # long-term memory items and retrieval
+    semantic/             # facts, entities, knowledge
+    episodic/             # events that happened
+    procedural/           # workflows and rules
   llm/                    # provider-neutral model boundary
   prompts/                # YAML prompt templates
   retrieval/              # retrieval strategies (in progress)
@@ -82,4 +85,4 @@ src/agent_memory/
 ## Docs
 
 - [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
-- [Long-Term Memory](docs/long-term-memory.md) — memory records, retrieval strategies, memory types
+- [Long-Term Memory](docs/long-term-memory.md) — memory items, retrieval strategies, memory types

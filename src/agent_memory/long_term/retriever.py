@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from agent_memory.long_term.state import MemoryRecord
-from agent_memory.long_term.state import MemoryType
+from agent_memory.long_term.item import LongTermRecord
+from agent_memory.long_term.item import MemoryType
 
 
 class MemoryRetriever(Protocol):
-    def add(self, record: MemoryRecord) -> None:
+    def add(self, record: LongTermRecord) -> None:
         ...
 
     def search(

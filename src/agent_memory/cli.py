@@ -4,8 +4,8 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from agent_memory.context.conversation.state import Message
-from agent_memory.context.conversation.state import SummaryItem
+from agent_memory.short_term.conversation.state import Message
+from agent_memory.short_term.conversation.state import SummaryItem
 from agent_memory.llm.adapters import to_llm_messages
 from agent_memory.main import create_chat_model
 from agent_memory.main import create_conversation_memory

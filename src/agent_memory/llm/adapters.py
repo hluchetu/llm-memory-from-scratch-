@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agent_memory.context.conversation.state import Message as ConversationMessage
-from agent_memory.context.conversation.state import ToolCall as ConversationToolCall
+from agent_memory.short_term.conversation.state import Message as ConversationMessage
+from agent_memory.short_term.conversation.state import ToolCall as ConversationToolCall
 from agent_memory.llm.message import AIMessage
 from agent_memory.llm.message import HumanMessage
 from agent_memory.llm.message import Message

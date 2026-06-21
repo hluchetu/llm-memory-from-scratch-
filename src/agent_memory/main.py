@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_memory.context.conversation.memory import ConversationMemory
+from agent_memory.short_term.conversation.memory import ConversationMemory
 from agent_memory.llm.anthropic import AnthropicChatModel
 from agent_memory.llm.interface import ChatModel
 from agent_memory.llm.openai_compatible import OpenAICompatibleChatModel
