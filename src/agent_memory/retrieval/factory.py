@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from agent_memory.embeddings import SentenceTransformerEmbedder
-from agent_memory.long_term import InMemoryStorage
 from agent_memory.long_term import MemoryStore
 from agent_memory.long_term import MemoryStorage
+from agent_memory.long_term import SQLiteMemoryStorage
 from agent_memory.retrieval.episodic import EpisodicMemoryRetriever
 from agent_memory.retrieval.hybrid import HybridMemoryRetriever
 from agent_memory.retrieval.lexical import LexicalMemoryRetriever
@@ -21,7 +21,7 @@ def create_memory_store(
     resolved_settings = settings or get_settings()
 
     return MemoryStore(
-        storage=storage or InMemoryStorage(),
+        storage=storage or SQLiteMemoryStorage(resolved_settings.long_term_database_path),
         retrievers=[
             _create_memory_retriever(resolved_settings),
         ],

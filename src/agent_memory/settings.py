@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     memory_directory: Path = Path(".memory")
     sqlite_database_path: Path = Path(".memory") / "conversations.db"
+    long_term_database_path: Path = Path(".memory") / "long_term.db"
     semantic_retrieval_enabled: bool = False
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     vector_store_path: Path | None = None
