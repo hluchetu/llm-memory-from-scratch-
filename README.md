@@ -86,3 +86,4 @@ src/agent_memory/
 
 - [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
 - [Long-Term Memory](docs/long-term-memory.md) — memory items, retrieval strategies, memory types
+- [Roadmap](docs/roadmap.md) — what is built, what is in progress, what is planned
