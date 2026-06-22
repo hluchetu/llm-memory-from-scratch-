@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agent_memory.retrieval.episodic import EpisodicMemoryRetriever
+from agent_memory.retrieval.factory import create_memory_store
 from agent_memory.retrieval.hybrid import HybridMemoryRetriever
 from agent_memory.retrieval.lexical import LexicalMemoryRetriever
 from agent_memory.retrieval.procedural import ProceduralMemoryRetriever
@@ -14,4 +15,5 @@ __all__ = [
     "ProceduralMemoryRetriever",
     "SemanticMemoryRetriever",
     "TextEmbedder",
+    "create_memory_store",
 ]

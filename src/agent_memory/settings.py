@@ -20,6 +20,10 @@ class Settings(BaseSettings):
 
     memory_directory: Path = Path(".memory")
     sqlite_database_path: Path = Path(".memory") / "conversations.db"
+    semantic_retrieval_enabled: bool = False
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    vector_store_path: Path | None = None
+    vector_store_collection: str = "long_term_memory"
 
     summary_recent_message_limit: int = Field(default=12, ge=1)
     summary_after_message_count: int = Field(default=20, ge=2)
