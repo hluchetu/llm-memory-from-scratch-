@@ -1,48 +1,81 @@
 from __future__ import annotations
 
 from agent_memory.long_term.item import LongTermRecord
-from agent_memory.long_term.item import MemoryType
 from agent_memory.long_term.retriever import MemoryRetriever
+from agent_memory.long_term.search import MemorySearch
+from agent_memory.long_term.search import RetrievalResult
+
+
+DEFAULT_RRF_RANK_CONSTANT = 60
 
 
 class HybridMemoryRetriever:
-    def __init__(self, retrievers: list[MemoryRetriever]) -> None:
+    def __init__(
+        self,
+        retrievers: list[MemoryRetriever],
+        routes: dict[str | None, list[MemoryRetriever]] | None = None,
+    ) -> None:
         self._retrievers = retrievers
+        self._routes = routes
 
     def add(self, record: LongTermRecord) -> None:
         for retriever in self._retrievers:
             retriever.add(record)
 
-    def search(
-        self,
-        namespace: tuple[str, ...],
-        query: str,
-        memory_type: MemoryType | None = None,
-        limit: int = 5,
-    ) -> list[str]:
-        record_ids: list[str] = []
-        seen_record_ids: set[str] = set()
+    def search(self, search: MemorySearch) -> list[RetrievalResult]:
+        rrf_scores_by_record_id: dict[str, float] = {}
+        best_results_by_record_id: dict[str, RetrievalResult] = {}
+        selected_retrievers = self._select_retrievers(search)
 
-        for retriever in self._retrievers:
-            retrieved_ids = retriever.search(
-                namespace=namespace,
-                query=query,
-                memory_type=memory_type,
-                limit=limit,
+        for retriever in selected_retrievers:
+            results = retriever.search(search)
+
+            for rank, result in enumerate(results, start=1):
+                rrf_scores_by_record_id[result.record_id] = (
+                    rrf_scores_by_record_id.get(result.record_id, 0.0)
+                    + reciprocal_rank_score(rank, DEFAULT_RRF_RANK_CONSTANT)
+                )
+
+                current_result = best_results_by_record_id.get(result.record_id)
+
+                if current_result is not None and current_result.score >= result.score:
+                    best_results_by_record_id[result.record_id] = current_result
+                else:
+                    best_results_by_record_id[result.record_id] = result
+
+        fused_results = [
+            RetrievalResult(
+                record_id=record_id,
+                source=best_result.source,
+                score=rrf_score,
+                relevance_score=best_result.relevance_score,
+                recency_score=best_result.recency_score,
+                importance_score=best_result.importance_score,
+                reason=best_result.reason,
             )
+            for record_id, rrf_score in rrf_scores_by_record_id.items()
+            for best_result in [best_results_by_record_id[record_id]]
+        ]
 
-            for record_id in retrieved_ids:
-                if record_id in seen_record_ids:
-                    continue
-
-                record_ids.append(record_id)
-                seen_record_ids.add(record_id)
-
-                if len(record_ids) >= limit:
-                    return record_ids
-
-        return record_ids
+        fused_results.sort(
+            key=lambda result: result.score,
+            reverse=True,
+        )
+        return fused_results[: search.limit]
 
     def delete(self, record_id: str) -> None:
         for retriever in self._retrievers:
             retriever.delete(record_id)
+
+    def _select_retrievers(self, search: MemorySearch) -> list[MemoryRetriever]:
+        if self._routes is None:
+            return self._retrievers
+
+        if search.memory_type in self._routes:
+            return self._routes[search.memory_type]
+
+        return self._routes.get(None, self._retrievers)
+
+
+def reciprocal_rank_score(rank: int, rank_constant: int) -> float:
+    return 1 / (rank_constant + rank)

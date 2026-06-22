@@ -46,6 +46,8 @@ Memory type describes what a record represents. It also influences how the recor
 
 Records are found through retrievers. A retriever returns record IDs — the store fetches the full records. This keeps retrieval and storage independent.
 
+For the detailed retrieval architecture, see [Memory Retrieval](./retrieval.md).
+
 ```
 keyword retriever  → record ids → store → LongTermRecord list
 vector retriever   → record ids → store → LongTermRecord list
@@ -66,7 +68,7 @@ Different memory types are typically retrieved differently:
 ```
 put(record)                               — store a record and make it searchable
 get(namespace, key)                       — fetch a specific record by key
-search(namespace, query, memory_type?)    — find records by meaning, keyword, or time
+search(namespace, query, memory_type?, metadata?) — find records by meaning, keyword, or time
 delete(namespace, key)                    — remove a record and its search data
 ```
 
@@ -78,6 +80,8 @@ The names in code are:
 LongTermRecord  — shared base for saved long-term memory records
 MemoryStorage   — saves and loads records
 InMemoryStorage — temporary storage for local runs and tests
+MemorySearch    — one search request
+MetadataFilter  — exact metadata, tag, and creation-time filters
 MemoryRetriever — searches records
 MemoryStore     — coordinates storage and retrievers
 ```
@@ -87,6 +91,7 @@ The folder structure separates the core memory store from type-specific memory c
 ```
 long_term/
   item.py          — LongTermRecord and MemoryType
+  search.py        — MemorySearch and MetadataFilter
   storage.py       — MemoryStorage protocol
   retriever.py     — MemoryRetriever protocol
   store.py         — MemoryStore

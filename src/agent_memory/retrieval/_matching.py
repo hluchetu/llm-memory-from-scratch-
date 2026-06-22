@@ -7,6 +7,7 @@ from agent_memory.long_term.episodic.event import EventMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
 from agent_memory.long_term.procedural.workflow import WorkflowMemory
+from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.semantic.entity import EntityMemory
 from agent_memory.long_term.semantic.knowledge import KnowledgeMemory
 
@@ -23,6 +24,14 @@ def memory_type_matches(
     memory_type: MemoryType | None,
 ) -> bool:
     return memory_type is None or record.memory_type == memory_type
+
+
+def record_matches_search(record: LongTermRecord, search: MemorySearch) -> bool:
+    return (
+        namespace_matches(record.namespace, search.namespace)
+        and memory_type_matches(record, search.memory_type)
+        and search.metadata.matches(record)
+    )
 
 
 def searchable_text(record: LongTermRecord) -> str:

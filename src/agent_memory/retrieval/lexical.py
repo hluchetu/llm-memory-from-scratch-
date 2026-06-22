@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from agent_memory.long_term.item import LongTermRecord
-from agent_memory.long_term.item import MemoryType
-from agent_memory.retrieval._matching import memory_type_matches
-from agent_memory.retrieval._matching import namespace_matches
+from agent_memory.long_term.search import MemorySearch
+from agent_memory.long_term.search import RetrievalResult
+from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.retrieval._matching import token_overlap_score
 
@@ -15,23 +15,14 @@ class LexicalMemoryRetriever:
     def add(self, record: LongTermRecord) -> None:
         self._records[record.id] = record
 
-    def search(
-        self,
-        namespace: tuple[str, ...],
-        query: str,
-        memory_type: MemoryType | None = None,
-        limit: int = 5,
-    ) -> list[str]:
+    def search(self, search: MemorySearch) -> list[RetrievalResult]:
         scored_records: list[tuple[float, LongTermRecord]] = []
 
         for record in self._records.values():
-            if not namespace_matches(record.namespace, namespace):
+            if not record_matches_search(record, search):
                 continue
 
-            if not memory_type_matches(record, memory_type):
-                continue
-
-            score = token_overlap_score(query, [searchable_text(record)])
+            score = token_overlap_score(search.query, [searchable_text(record)])
 
             if score <= 0:
                 continue
@@ -39,7 +30,16 @@ class LexicalMemoryRetriever:
             scored_records.append((score, record))
 
         scored_records.sort(key=lambda scored_record: scored_record[0], reverse=True)
-        return [record.id for _, record in scored_records[:limit]]
+        return [
+            RetrievalResult(
+                record_id=record.id,
+                source="lexical",
+                score=score,
+                relevance_score=score,
+                reason="matched query tokens against record text",
+            )
+            for score, record in scored_records[: search.limit]
+        ]
 
     def delete(self, record_id: str) -> None:
         self._records.pop(record_id, None)

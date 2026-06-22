@@ -3,6 +3,9 @@ from __future__ import annotations
 from agent_memory.long_term.retriever import MemoryRetriever
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
+from agent_memory.long_term.search import MemorySearch
+from agent_memory.long_term.search import MetadataFilter
+from agent_memory.long_term.search import RetrievalResult
 from agent_memory.long_term.storage import MemoryStorage
 
 
@@ -34,28 +37,32 @@ class MemoryStore:
         query: str,
         memory_type: MemoryType | None = None,
         limit: int = 5,
+        metadata: MetadataFilter | None = None,
     ) -> list[LongTermRecord]:
-        record_ids: list[str] = []
-        seen_record_ids: set[str] = set()
+        search = MemorySearch(
+            namespace=namespace,
+            query=query,
+            memory_type=memory_type,
+            limit=limit,
+            metadata=metadata or MetadataFilter(),
+        )
+        results_by_record_id: dict[str, RetrievalResult] = {}
 
         for retriever in self._retrievers:
-            for record_id in retriever.search(
-                namespace=namespace,
-                query=query,
-                memory_type=memory_type,
-                limit=limit,
-            ):
-                if record_id in seen_record_ids:
+            for result in retriever.search(search):
+                current_result = results_by_record_id.get(result.record_id)
+
+                if current_result is not None and current_result.score >= result.score:
                     continue
 
-                record_ids.append(record_id)
-                seen_record_ids.add(record_id)
+                results_by_record_id[result.record_id] = result
 
-                if len(record_ids) >= limit:
-                    break
-
-            if len(record_ids) >= limit:
-                break
+        results = sorted(
+            results_by_record_id.values(),
+            key=lambda result: result.score,
+            reverse=True,
+        )
+        record_ids = [result.record_id for result in results[:limit]]
 
         return self._storage.get_many(record_ids)
 
