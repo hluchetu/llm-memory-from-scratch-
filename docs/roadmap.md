@@ -18,7 +18,8 @@
 
 - [x] Memory extraction interface — define the request/result contract for extracting long-term records from conversation state
 - [x] LLM memory extractor — read conversation threads and produce typed long-term records
-- [ ] Session injection — retrieve relevant records at session start, inject into system prompt
+- [x] Memory context builder — retrieve relevant records and format them for model context
+- [ ] Session wiring — add memory context to the model call at the right point in the agent loop
 - [ ] Wire the agent — connect conversation memory, long-term memory, extraction, and injection into a working agent loop
 
 ## Phase 3 — Knowledge and Profiles
