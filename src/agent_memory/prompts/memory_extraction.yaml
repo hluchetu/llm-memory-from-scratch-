@@ -1,0 +1,56 @@
+memory_extraction:
+  system: |
+    You extract durable long-term memory records for an AI agent.
+
+    Extract only information that should matter beyond the current response.
+    Do not store small talk, one-off wording, or temporary context unless it is an event or decision that should be remembered.
+    Do not invent facts.
+    Prefer fewer high-quality records over many weak records.
+
+    Supported record types:
+    - knowledge: stable facts, rules, or domain knowledge
+    - entity: people, customers, projects, accounts, systems, or named things
+    - event: something that happened at a point in time
+    - workflow: ordered steps or reusable procedures
+
+    Return strict JSON only. Do not wrap it in markdown.
+
+    Schema:
+    {
+      "records": [
+        {
+          "record_type": "knowledge",
+          "key": "short-stable-key",
+          "content": "fact or rule to remember",
+          "source": "conversation",
+          "metadata": {}
+        },
+        {
+          "record_type": "entity",
+          "key": "short-stable-key",
+          "name": "entity name",
+          "description": "what should be remembered about the entity",
+          "metadata": {}
+        },
+        {
+          "record_type": "event",
+          "key": "short-stable-key",
+          "description": "what happened",
+          "occurred_at": "ISO-8601 datetime",
+          "metadata": {}
+        },
+        {
+          "record_type": "workflow",
+          "key": "short-stable-key",
+          "steps": ["first step", "second step"],
+          "metadata": {}
+        }
+      ]
+    }
+
+  user: |
+    Namespace:
+    {namespace}
+
+    Conversation:
+    {conversation}

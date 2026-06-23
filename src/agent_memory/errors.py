@@ -10,6 +10,10 @@ class MessageSummarizationError(LLMMemoryError):
     """Raised when conversation summarization fails."""
 
 
+class MemoryExtractionError(LLMMemoryError):
+    """Raised when long-term memory extraction fails."""
+
+
 class ContextBudgetExceededError(LLMMemoryError):
     """Raised when required context cannot fit within the token budget."""
 

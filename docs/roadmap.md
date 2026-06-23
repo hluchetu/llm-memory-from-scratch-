@@ -17,7 +17,7 @@
 ## Phase 2 — Memory Loop (current)
 
 - [x] Memory extraction interface — define the request/result contract for extracting long-term records from conversation state
-- [ ] Memory extraction — read conversation threads, extract typed long-term records using LLM
+- [x] LLM memory extractor — read conversation threads and produce typed long-term records
 - [ ] Session injection — retrieve relevant records at session start, inject into system prompt
 - [ ] Wire the agent — connect conversation memory, long-term memory, extraction, and injection into a working agent loop
 
