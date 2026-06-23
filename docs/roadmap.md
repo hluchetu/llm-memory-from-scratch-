@@ -36,3 +36,30 @@
 - [ ] Context window telemetry and token budget reporting
 - [ ] Retrieval observability — scores, sources, and reasons surfaced per search
 - [ ] Multi-agent shared memory via namespace-scoped long-term stores
+- [ ] PostgreSQL storage backend for production deployments
+- [ ] Redis cache layer for hot conversation state and frequently retrieved memories
+
+## Future Storage Direction
+
+SQLite is the right default for this repository today because it keeps the system easy to run locally, easy to inspect, and suitable for a single-agent or single-node setup. It is also a good reference implementation for the storage contract.
+
+For production, the storage layer should evolve toward PostgreSQL and Redis:
+
+- **PostgreSQL** will become the primary durable store for long-term memory records, conversation timelines, audit metadata, namespaces, lifecycle fields, and future multi-tenant access patterns. It gives us stronger concurrency, migrations, indexing, backup/restore, row-level security, and operational tooling than a local SQLite file.
+- **Redis** will sit in front of durable storage as a fast cache for active threads, recent conversation state, compiled context windows, and frequently retrieved memories. It is useful for low-latency reads, short-lived working state, and reducing repeated database or retrieval work.
+
+The intended architecture is:
+
+```text
+agent runtime
+  ↓
+ConversationMemory / MemoryStore
+  ↓
+Redis cache for hot state and repeated reads
+  ↓
+PostgreSQL as durable source of truth
+  ↓
+retrieval indexes: lexical, vector, graph, or hybrid
+```
+
+The important design constraint is that application code should continue to depend on the same storage interfaces. Moving from SQLite to PostgreSQL, or adding Redis in front, should change the backend wiring, not the public memory API.
