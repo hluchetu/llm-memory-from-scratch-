@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from datetime import datetime
+from datetime import timezone
 
 from agent_memory.long_term.episodic.event import EventMemory
 from agent_memory.long_term.item import LongTermRecord
@@ -28,10 +30,23 @@ def memory_type_matches(
 
 def record_matches_search(record: LongTermRecord, search: MemorySearch) -> bool:
     return (
-        namespace_matches(record.namespace, search.namespace)
+        record_is_active(record)
+        and namespace_matches(record.namespace, search.namespace)
         and memory_type_matches(record, search.memory_type)
         and search.metadata.matches(record)
     )
+
+
+def record_is_active(
+    record: LongTermRecord,
+    current_time: datetime | None = None,
+) -> bool:
+    now = current_time or datetime.now(timezone.utc)
+
+    if record.invalidated_at is not None:
+        return False
+
+    return record.expires_at is None or record.expires_at > now
 
 
 def searchable_text(record: LongTermRecord) -> str:

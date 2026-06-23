@@ -28,15 +28,19 @@ class SQLiteMemoryStorage:
                     memory_type,
                     record_type,
                     created_at,
+                    expires_at,
+                    invalidated_at,
                     metadata_json,
                     record_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(namespace, key) DO UPDATE SET
                     id = excluded.id,
                     memory_type = excluded.memory_type,
                     record_type = excluded.record_type,
                     created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    invalidated_at = excluded.invalidated_at,
                     metadata_json = excluded.metadata_json,
                     record_json = excluded.record_json
                 """,
@@ -47,6 +51,8 @@ class SQLiteMemoryStorage:
                     record.memory_type,
                     str(payload["record_type"]),
                     str(payload["created_at"]),
+                    optional_text(payload.get("expires_at")),
+                    optional_text(payload.get("invalidated_at")),
                     json.dumps(payload["metadata"]),
                     json.dumps(payload),
                 ),
@@ -129,12 +135,16 @@ class SQLiteMemoryStorage:
                     memory_type TEXT NOT NULL,
                     record_type TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    invalidated_at TEXT,
                     metadata_json TEXT NOT NULL,
                     record_json TEXT NOT NULL,
                     UNIQUE(namespace, key)
                 )
                 """
             )
+            ensure_column(connection, "expires_at", "TEXT")
+            ensure_column(connection, "invalidated_at", "TEXT")
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_long_term_records_memory_type
@@ -147,7 +157,42 @@ class SQLiteMemoryStorage:
                 ON long_term_records(created_at)
                 """
             )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_long_term_records_expires_at
+                ON long_term_records(expires_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_long_term_records_invalidated_at
+                ON long_term_records(invalidated_at)
+                """
+            )
 
 
 def serialize_namespace(namespace: tuple[str, ...]) -> str:
     return json.dumps(list(namespace))
+
+
+def optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+
+    return str(value)
+
+
+def ensure_column(
+    connection: sqlite3.Connection,
+    column_name: str,
+    column_type: str,
+) -> None:
+    rows = connection.execute("PRAGMA table_info(long_term_records)").fetchall()
+    existing_columns = {str(row["name"]) for row in rows}
+
+    if column_name in existing_columns:
+        return
+
+    connection.execute(
+        f"ALTER TABLE long_term_records ADD COLUMN {column_name} {column_type}"
+    )

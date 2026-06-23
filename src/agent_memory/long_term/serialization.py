@@ -21,6 +21,10 @@ def record_to_dict(record: LongTermRecord) -> RecordPayload:
         "key": record.key,
         "memory_type": record.memory_type,
         "created_at": record.created_at.isoformat(),
+        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
+        "invalidated_at": (
+            record.invalidated_at.isoformat() if record.invalidated_at else None
+        ),
         "metadata": record.metadata,
     }
 
@@ -62,6 +66,8 @@ def record_from_dict(payload: RecordPayload) -> LongTermRecord:
         "namespace": tuple(payload["namespace"]),
         "key": str(payload["key"]),
         "created_at": parse_datetime(payload["created_at"]),
+        "expires_at": optional_datetime(payload.get("expires_at")),
+        "invalidated_at": optional_datetime(payload.get("invalidated_at")),
         "metadata": dict(payload.get("metadata") or {}),
     }
 
@@ -100,6 +106,13 @@ def parse_datetime(value: Any) -> datetime:
         return value
 
     return datetime.fromisoformat(str(value))
+
+
+def optional_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+
+    return parse_datetime(value)
 
 
 def optional_string(value: Any) -> str | None:

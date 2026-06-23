@@ -208,6 +208,15 @@ If the active customer is in KE, Memory B should not compete.
 
 `occurred_after` and `occurred_before` filter episodic memories by when the event actually happened. This distinction matters when an event is written to memory later than the real-world event time.
 
+Retrieval also applies record lifecycle filtering before scoring:
+
+```text
+expires_at in the past      → do not retrieve
+invalidated_at is not null  → do not retrieve
+```
+
+This keeps stale or superseded memory out of the model context while still allowing the storage layer to keep the record for auditability, debugging, or historical analysis.
+
 ## Why Not Only Keywords?
 
 Keyword search is useful, but it is not enough for semantic memory.
@@ -245,7 +254,7 @@ Implemented:
 - episodic retrieval
 - procedural retrieval
 - hybrid retrieval with Reciprocal Rank Fusion
-- namespace, memory type, metadata, tag, and created-time filters
+- namespace, memory type, metadata, tag, created-time, occurred-time, and lifecycle filters
 
 Still needed:
 

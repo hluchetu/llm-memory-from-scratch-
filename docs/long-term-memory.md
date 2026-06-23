@@ -17,6 +17,8 @@ namespace   — where this memory belongs: ("users", "user-123") or ("projects",
 key         — identifier within the namespace: "preference:output-format"
 memory_type — what kind of memory this is (see below)
 created_at  — when the record was created
+expires_at  — optional time when the record should stop being recalled
+invalidated_at — optional time when the record was superseded or contradicted
 metadata    — source, confidence, timestamps, and any other context
 ```
 
@@ -28,6 +30,40 @@ Typed records then add their own fields:
 | `EntityMemory` | `name`, `description` |
 | `EventMemory` | `description`, `occurred_at` |
 | `WorkflowMemory` | `steps: list[str]` |
+
+## Record Lifecycle
+
+Long-term memory needs a lifecycle because facts change.
+
+Two fields control whether a record is still eligible for retrieval:
+
+```text
+expires_at      — the record becomes stale after this time
+invalidated_at  — the record was explicitly replaced, corrected, or revoked
+```
+
+The record can still remain in storage for auditability and debugging, but retrieval excludes it from context once either condition applies.
+
+Example:
+
+```python
+from datetime import datetime
+from datetime import timezone
+
+from agent_memory.long_term import KnowledgeMemory
+
+memory = KnowledgeMemory(
+    namespace=("bank", "customer-123"),
+    key="daily-transfer-limit",
+    content="The customer's daily transfer limit is KES 150,000.",
+    source="core-banking-policy",
+    expires_at=datetime(2026, 12, 31, tzinfo=timezone.utc),
+)
+```
+
+Use `expires_at` when the system already knows when information becomes stale, such as temporary limits, promotional rules, scheduled policy windows, or expiring consent.
+
+Use `invalidated_at` when a newer record contradicts the old one, such as a changed preference, corrected customer profile, replaced workflow, or revoked procedure.
 
 ## Memory Types
 
@@ -126,14 +162,14 @@ conversation thread → extractor → long-term store
 
 Implemented:
 
-- `LongTermRecord` shared base with namespace, key, memory type, created time, and metadata
+- `LongTermRecord` shared base with namespace, key, memory type, created time, lifecycle fields, and metadata
 - Typed long-term records for knowledge, entities, events, and workflows
 - `MemoryStorage` protocol
+- SQLite storage implementation
 - `MemoryRetriever` protocol
 - `MemoryStore` main operations — put, get, search, delete
 - Retrieval modules for lexical, semantic, episodic, procedural, and hybrid search
 
 In progress:
 
-- SQLite store implementation
 - Memory extraction from conversation messages
