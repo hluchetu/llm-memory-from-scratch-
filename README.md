@@ -51,12 +51,13 @@ AGENT_MEMORY_MODEL_API_KEY=...
 - Storage backends: in-memory, SQLite, JSON, Markdown, cached composition
 - Provider-neutral LLM message boundary — internal messages stay separate from model messages
 - Long-term typed records with namespace, key, metadata, and pluggable retrieval
+- Semantic retrieval with Sentence Transformers and Chroma
+- Hybrid long-term retrieval with Reciprocal Rank Fusion
 - CLI with persistent conversation memory across runs
 
 ## What Is Planned
 
-- Semantic retrieval with embeddings and vector search
-- Time and graph retrieval strategies
+- Graph retrieval strategies
 - Memory extraction from conversations into typed long-term records
 - Profile memory for durable user and project facts
 - Knowledge base ingestion from files and folders
@@ -84,6 +85,8 @@ src/agent_memory/
 
 ## Docs
 
+- [Agent Memory Architecture](docs/agent-memory-architecture.md) — architecture choices, tradeoffs, provider approaches, and why this repo is designed this way
 - [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
 - [Long-Term Memory](docs/long-term-memory.md) — memory items, retrieval strategies, memory types
+- [Memory Retrieval](docs/retrieval.md) — lexical, semantic, episodic, procedural, and hybrid retrieval
 - [Roadmap](docs/roadmap.md) — what is built, what is in progress, what is planned
