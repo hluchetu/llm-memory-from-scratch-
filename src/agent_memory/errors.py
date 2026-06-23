@@ -14,6 +14,14 @@ class MemoryExtractionError(LLMMemoryError):
     """Raised when long-term memory extraction fails."""
 
 
+class AgentRunError(LLMMemoryError):
+    """Raised when an agent turn cannot complete."""
+
+
+class AgentOutputValidationError(AgentRunError):
+    """Raised when an agent response cannot be parsed into the expected output."""
+
+
 class ContextBudgetExceededError(LLMMemoryError):
     """Raised when required context cannot fit within the token budget."""
 

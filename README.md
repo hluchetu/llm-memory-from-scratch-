@@ -86,6 +86,7 @@ src/agent_memory/
 ## Docs
 
 - [Agent Memory Architecture](docs/agent-memory-architecture.md) — architecture choices, tradeoffs, provider approaches, and why this repo is designed this way
+- [Agent Runtime Architecture](docs/agent-architecture.md) — how the agent layer is structured around agent, session, runner, and result
 - [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
 - [Long-Term Memory](docs/long-term-memory.md) — memory items, retrieval strategies, memory types
 - [Memory Retrieval](docs/retrieval.md) — lexical, semantic, episodic, procedural, and hybrid retrieval
