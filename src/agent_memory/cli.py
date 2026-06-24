@@ -4,11 +4,16 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
+from agent_memory.agent import Agent
+from agent_memory.agent import AgentRunner
+from agent_memory.agent import AgentSession
+from agent_memory.context import LongTermMemoryContextBuilder
+from agent_memory.extraction import LLMMemoryExtractor
 from agent_memory.short_term.conversation.state import Message
 from agent_memory.short_term.conversation.state import SummaryItem
-from agent_memory.llm.adapters import to_llm_messages
 from agent_memory.main import create_chat_model
 from agent_memory.main import create_conversation_memory
+from agent_memory.retrieval.factory import create_memory_store
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -22,7 +27,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         except RuntimeError as error:
             parser.exit(1, f"error: {error}\n")
 
+        namespace = args.namespace
+        memory_store = create_memory_store() if namespace is not None else None
+        context_builder = (
+            LongTermMemoryContextBuilder(memory_store)
+            if memory_store is not None
+            else None
+        )
+        extractor = (
+            LLMMemoryExtractor(model)
+            if memory_store is not None
+            else None
+        )
+        runner = AgentRunner(
+            conversation_memory=memory,
+            memory_store=memory_store,
+            context_builder=context_builder,
+            extractor=extractor,
+        )
+        agent = Agent(
+            name="agent-memory-cli",
+            instructions="You are a helpful assistant with access to conversation memory.",
+            model=model,
+        )
+        session = AgentSession(
+            thread_id=args.thread_id,
+            namespace=namespace,
+        )
+
         print(f"Thread: {args.thread_id}")
+        if namespace is not None:
+            print(f"Namespace: {'/'.join(namespace)}")
         print("Type 'exit' or 'quit' to stop.")
 
         while True:
@@ -34,22 +69,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not user_input:
                 continue
 
-            memory.add_message(
-                thread_id=args.thread_id,
-                role="user",
-                content=user_input,
+            result = runner.run(
+                agent=agent,
+                session=session,
+                user_input=user_input,
             )
-            messages = memory.get_messages(args.thread_id)
-            response = model.invoke(to_llm_messages(messages))
-            memory.add_message(
-                thread_id=args.thread_id,
-                role="assistant",
-                content=response.content,
-                model_name=response.metadata.get("model"),
-                usage=response.usage,
-                metadata=response.metadata,
-            )
-            print(f"assistant> {response.content}")
+            print(f"assistant> {result.raw_output}")
 
     if args.command == "show-thread":
         items = memory.get_items(args.thread_id)
@@ -94,6 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start an interactive memory-backed chat.",
     )
     chat.add_argument("thread_id")
+    chat.add_argument(
+        "--namespace",
+        type=parse_namespace,
+        default=None,
+        help="Optional long-term memory namespace, written as user/hayat or project/name.",
+    )
 
     show_thread = subparsers.add_parser(
         "show-thread",
@@ -108,6 +139,22 @@ def build_parser() -> argparse.ArgumentParser:
     clear_thread.add_argument("thread_id")
 
     return parser
+
+
+def parse_namespace(value: str | None) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+
+    parts = tuple(
+        part.strip()
+        for part in value.split("/")
+        if part.strip()
+    )
+
+    if not parts:
+        raise argparse.ArgumentTypeError("namespace must not be empty")
+
+    return parts
 
 
 def format_item(item: object) -> str:

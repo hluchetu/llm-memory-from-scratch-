@@ -250,7 +250,7 @@ Implemented:
 - `MetadataFilter`
 - `RetrievalResult`
 - lexical retrieval
-- semantic retrieval interface with injected embedder
+- semantic retrieval with Sentence Transformers and Chroma vector store
 - episodic retrieval
 - procedural retrieval
 - hybrid retrieval with Reciprocal Rank Fusion
@@ -258,8 +258,6 @@ Implemented:
 
 Still needed:
 
-- production embedding provider
-- vector index or vector database
 - reranking
-- graph/entity traversal
+- graph and entity traversal
 - retrieval tests

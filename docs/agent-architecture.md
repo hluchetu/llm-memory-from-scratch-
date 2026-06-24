@@ -1,8 +1,8 @@
 # Agent Architecture
 
-This document explains the agent runtime architecture this repository is moving toward.
+This document explains the agent runtime architecture — how a turn executes and how the memory layer is wired into it.
 
-The goal is to build the agent layer from scratch while keeping the same separation of concerns that strong production agent systems tend to converge on:
+The agent layer is built around a clear separation of concerns:
 
 ```text
 agent definition
@@ -13,7 +13,7 @@ explicit dependencies
 memory lifecycle
 ```
 
-The memory layer already has separate building blocks:
+The memory layer provides separate building blocks that the runner coordinates:
 
 ```text
 ConversationMemory             -> saves the current thread
@@ -23,7 +23,7 @@ LongTermMemoryContextBuilder   -> formats retrieved memory for model context
 ChatModel                      -> provider-neutral model boundary
 ```
 
-The next step is to connect these pieces without turning the agent into one large class.
+These pieces are connected through `AgentRunner` without folding them into one large class.
 
 Memory is a capability of the runtime, not the identity of the agent. A banking support agent, research agent, coding agent, or travel agent can all use the same memory architecture without becoming a special "memory agent".
 
@@ -284,7 +284,7 @@ This keeps structured output as a normal agent capability, not a separate agent 
 
 ## The Runtime Flow
 
-One turn should look like this:
+One turn looks like this:
 
 ```text
 1. Receive user input
@@ -437,28 +437,16 @@ ToolResult
 
 Tool calls and tool results should become part of the conversation timeline so memory processors, summarizers, and extractors can inspect what happened.
 
-## Future Extension Points
+## Extension Points
 
-The agent layer should leave room for:
+The agent layer leaves room for:
 
 ```text
 graph-based execution
 human approval
 memory evaluation
+tool execution in the runner
 ```
-
-But those should not be added before the core memory loop works.
-
-The next implementation should focus on:
-
-```text
-Agent
-AgentSession
-AgentResult
-AgentRunner
-```
-
-Then wire one complete turn end to end.
 
 ## Design Principle
 
@@ -473,4 +461,4 @@ The extractor forms it.
 The runner coordinates it.
 ```
 
-That is the architecture this repository is adapting from scratch.
+That is the architecture this repository has built from scratch.

@@ -169,7 +169,6 @@ Implemented:
 - `MemoryRetriever` protocol
 - `MemoryStore` main operations — put, get, search, delete
 - Retrieval modules for lexical, semantic, episodic, procedural, and hybrid search
-
-In progress:
-
-- Memory extraction from conversation messages
+- `LLMMemoryExtractor` — reads conversation threads and produces typed long-term records
+- `LongTermMemoryContextBuilder` — retrieves relevant records and formats them as a system message
+- Full extraction and injection wired into `AgentRunner`

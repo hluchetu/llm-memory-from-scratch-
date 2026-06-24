@@ -262,13 +262,17 @@ Use this for:
 
 Mem0 is close to this pattern. Its paper focuses on scalable long-term memory through selective memory formation and retrieval rather than repeatedly sending full conversation history.
 
-This repository is designed to support this next:
+This repository implements this pattern. The full per-turn flow is:
 
 ```text
-conversation messages
-  -> memory extractor
-  -> LongTermRecord
-  -> MemoryStore
+user input
+  -> conversation ledger
+  -> long-term store queried (injection)
+  -> retrieved records injected as system message
+  -> model called
+  -> response stored in ledger
+  -> LLM extractor runs on new conversation items
+  -> typed LongTermRecord persisted to MemoryStore (extraction)
 ```
 
 ## Architecture 5: Stateful Agent Memory
@@ -579,6 +583,16 @@ Long-term memory:
   EventMemory
   WorkflowMemory
 
+Extraction:
+  LLMMemoryExtractor  — conversation -> typed long-term records
+  MemoryExtractionRequest / MemoryExtractionResult
+
+Injection:
+  LongTermMemoryContextBuilder  — retrieval -> formatted system message
+
+Agent runtime:
+  Agent, AgentSession, AgentRunner, AgentResult
+
 Storage:
   SQLite now
   PostgreSQL later
@@ -595,7 +609,7 @@ Lifecycle:
   invalidated_at
 ```
 
-Future direction:
+Planned:
 
 ```text
 conversation
@@ -639,21 +653,22 @@ Old facts may expire. New facts may contradict old facts. Long-term memory shoul
 | Relationship or temporal reasoning | Graph plus vector |
 | Enterprise governance | Relational/document store plus graph/context layer |
 
-## The North Star
+## The Current Flow
 
-The architecture should eventually look like this:
+Every turn runs this sequence:
 
 ```text
-agent runtime
-  -> short-term conversation memory
-  -> context processors
-  -> long-term memory retrieval
-  -> model call
-  -> memory extraction
-  -> typed long-term records
-  -> source-of-truth storage
-  -> retrieval indexes
+user input
+  -> short-term conversation ledger
+  -> context processors (trim, compact, summarize)
+  -> long-term memory retrieval (injection)
+  -> model call: system prompt + memory context + conversation history
+  -> response stored in ledger
+  -> memory extraction: new conversation items -> typed long-term records
+  -> records persisted to source-of-truth storage and retrieval indexes
 ```
+
+Injection happens before the model call. Extraction happens after. The ledger is the source of truth for both. This is what runs today.
 
 The most important principle:
 

@@ -21,7 +21,8 @@
 - [x] Memory context builder — retrieve relevant records and format them for model context
 - [x] Agent runtime primitives — Agent, AgentSession, AgentRunner, and AgentResult
 - [x] Session wiring — runner adds memory context, calls the model, stores the response, extracts memory, and saves records
-- [ ] CLI integration — use AgentRunner in the chat command
+- [x] CLI integration — use AgentRunner in the chat command
+- [ ] Memory inspection commands — search and display long-term memory from the CLI
 
 ## Phase 3 — Knowledge and Profiles
 
