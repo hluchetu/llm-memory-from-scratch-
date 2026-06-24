@@ -1,66 +1,84 @@
 # agent-memory-from-scratch
 
-Memory architecture for AI agents, built from first principles.
+Memory layer for AI agents, built from first principles.
 
-Agent memory is a data flow: what enters the agent, what it retains, what it surfaces, and when. This repo builds that flow layer by layer — conversation ledger, context projection, long-term storage, retrieval, extraction, and injection — without reaching for a managed provider until the architecture is clear. The goal is to understand what moves where before deciding what should move it.
+Agent memory is a data flow: what enters the agent, what it retains, what it surfaces, and when. This library builds that flow layer by layer — conversation ledger, context projection, long-term storage, retrieval, extraction, and injection — without prescribing a specific agent SDK or runtime.
+
+Use it with Strands, LangGraph, or any other agent framework.
 
 An article covering the thinking behind this project is at [hluchetu.dev](https://hluchetu.dev).
 
-## Quick Start
-
-```bash
-pip install -e .
-cp .env.example .env
-```
-
-Set your model credentials in `.env`, then start a conversation:
-
-```bash
-agent-memory chat my-thread
-```
-
-Use long-term memory by adding a namespace:
-
-```bash
-agent-memory chat my-thread --namespace user/hayat
-```
-
-Inspect or clear a thread:
-
-```bash
-agent-memory show-thread my-thread
-agent-memory clear-thread my-thread
-```
-
-## Using as a Library
-
-Install into any project:
+## Installation
 
 ```bash
 pip install -e /path/to/agent-memory-from-scratch
 ```
 
-Then import directly:
-
-```python
-from agent_memory.agent import Agent, AgentRunner, AgentSession
-from agent_memory.long_term.semantic import KnowledgeMemory
-from agent_memory.long_term.store import MemoryStore
-```
-
-Supported providers:
+Set your LLM credentials for memory extraction in `.env`:
 
 ```bash
-# DeepSeek
-AGENT_MEMORY_MODEL_PROVIDER=deepseek
-AGENT_MEMORY_MODEL_NAME=deepseek-chat
-AGENT_MEMORY_MODEL_BASE_URL=https://api.deepseek.com
-AGENT_MEMORY_MODEL_API_KEY=...
+cp .env.example .env
+```
 
-# Anthropic
-AGENT_MEMORY_MODEL_PROVIDER=anthropic
-AGENT_MEMORY_MODEL_NAME=claude-sonnet-4-5
-AGENT_MEMORY_MODEL_API_KEY=...
+## Usage
+
+Every turn runs the same two operations — inject before the model call, extract after.
+
+**Injection — retrieve relevant long-term memories and format them as context:**
+
+```python
+from agent_memory.context import LongTermMemoryContextBuilder
+from agent_memory.context import MemoryContextRequest
+
+context = context_builder.build(MemoryContextRequest(
+    namespace=("user", "alice"),
+    query=user_input,
+))
+# pass context.content as a system message to your agent SDK
+```
+
+**Extraction — read new conversation items and persist typed records:**
+
+```python
+from agent_memory.extraction import LLMMemoryExtractor
+from agent_memory.extraction import MemoryExtractionRequest
+
+result = extractor.extract(MemoryExtractionRequest(
+    namespace=("user", "alice"),
+    conversation=conversation,
+    since_item_id=last_item_id,
+))
+for record in result.records:
+    memory_store.put(record)
+```
+
+**Conversation ledger — track what happened in a session:**
+
+```python
+from agent_memory.short_term.conversation.memory import ConversationMemory
+from agent_memory.storage.sqlite import SQLiteStorage
+
+memory = ConversationMemory(storage=SQLiteStorage(path="threads.db"))
+memory.add_message(thread_id="thread-1", role="user", content="Hello")
+messages = memory.get_messages("thread-1")
+```
+
+**Long-term store — persist and search typed records:**
+
+```python
+from agent_memory.long_term.store import MemoryStore
+from agent_memory.long_term.semantic import KnowledgeMemory
+
+store.put(KnowledgeMemory(
+    namespace=("user", "alice"),
+    key="timezone",
+    content="User is based in Nairobi, EAT (UTC+3)",
+))
+
+records = store.search(
+    namespace=("user", "alice"),
+    query="What timezone is the user in?",
+)
 ```
 
 ## What Is Built
@@ -70,7 +88,6 @@ AGENT_MEMORY_MODEL_API_KEY=...
 - Context trimming by token budget, preserving system messages and tool interaction groups
 - Tool interaction compaction — collapses old tool calls into a single summary line
 - LLM-based summarization of old messages
-- Persisted summaries as derived timeline items
 - Storage backends: in-memory, SQLite, JSON, Markdown, cached composition
 - Provider-neutral LLM message boundary — internal messages stay separate from model messages
 - Long-term typed records with namespace, key, metadata, and pluggable retrieval
@@ -78,9 +95,6 @@ AGENT_MEMORY_MODEL_API_KEY=...
 - Hybrid long-term retrieval with Reciprocal Rank Fusion
 - LLM memory extractor — reads conversation threads and produces typed long-term records
 - Memory context builder — retrieves relevant long-term records and formats them for model context
-- Agent runtime — Agent, AgentSession, AgentRunner, and AgentResult wired end-to-end
-- Full memory loop — injection before the model call, extraction after the response
-- CLI with persistent conversation memory and long-term memory across runs
 
 ## What Is Planned
 
@@ -93,14 +107,14 @@ AGENT_MEMORY_MODEL_API_KEY=...
 
 ## Architecture
 
-Every turn runs the same flow:
+The memory flow is framework-agnostic. Every turn:
 
 ```
 user input
   → appended to conversation ledger
-  → long-term store queried with user input as the search query
-  → retrieved records injected as a system message
-  → model called: system prompt + memory context + conversation history
+  → long-term store queried (injection)
+  → retrieved records formatted as system message
+  → your agent SDK calls the model
   → response appended to ledger
   → LLM extractor runs on new conversation items
   → typed long-term records persisted to store
@@ -110,7 +124,6 @@ Injection happens before the model call. Extraction happens after. The ledger is
 
 ```
 src/agent_memory/
-  agent/                     # Agent, AgentSession, AgentRunner, AgentResult
   short_term/conversation/   # conversation ledger, storage, context processors
   storage/                   # persistence backends (in-memory, SQLite, JSON, Markdown)
   long_term/                 # typed records — episodic, semantic, entity, procedural
@@ -125,9 +138,7 @@ src/agent_memory/
 
 ## Docs
 
-- [Agent Memory Architecture](docs/agent-memory-architecture.md) — architecture choices, tradeoffs, provider approaches, and why this repo is designed this way
-- [Agent Runtime Architecture](docs/agent-architecture.md) — how the agent layer is structured around agent, session, runner, and result
-- [CLI Architecture](docs/cli.md) — command design, session identity, memory inspection, and how the CLI uses the agent runtime
+- [Agent Memory Architecture](docs/agent-memory-architecture.md) — architecture choices, tradeoffs, and provider approaches
 - [Short-Term Memory](docs/short-term-memory.md) — conversation state, storage, context trimming, summarization
 - [Long-Term Memory](docs/long-term-memory.md) — memory items, retrieval strategies, memory types
 - [Memory Retrieval](docs/retrieval.md) — lexical, semantic, episodic, procedural, and hybrid retrieval

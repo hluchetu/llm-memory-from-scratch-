@@ -14,15 +14,12 @@
 - Scored retrieval results with per-retriever sub-scores
 - Factory and settings wiring
 
-## Phase 2 — Memory Loop (current)
+## Phase 2 — Memory Loop ✓
 
-- [x] Memory extraction interface — define the request/result contract for extracting long-term records from conversation state
-- [x] LLM memory extractor — read conversation threads and produce typed long-term records
-- [x] Memory context builder — retrieve relevant records and format them for model context
-- [x] Agent runtime primitives — Agent, AgentSession, AgentRunner, and AgentResult
-- [x] Session wiring — runner adds memory context, calls the model, stores the response, extracts memory, and saves records
-- [x] CLI integration — use AgentRunner in the chat command
-- [ ] Memory inspection commands — search and display long-term memory from the CLI
+- Memory extraction interface — request/result contract for extracting long-term records from conversation state
+- LLM memory extractor — reads conversation threads and produces typed long-term records
+- Memory context builder — retrieves relevant records and formats them for model context
+- Framework-agnostic design — extraction and injection work with any agent SDK
 
 ## Phase 3 — Knowledge and Profiles
 

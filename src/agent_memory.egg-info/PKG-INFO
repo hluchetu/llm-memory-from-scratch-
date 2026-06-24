@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: agent-memory
+Version: 0.1.0
+Summary: Memory architecture for AI agents, built from first principles.
+Requires-Python: >=3.12
+Requires-Dist: pydantic>=2.10.0
+Requires-Dist: pydantic-settings>=2.10.0
+Requires-Dist: pyyaml>=6.0.2
+Requires-Dist: sentence-transformers>=3.0.0
+Requires-Dist: chromadb>=1.0.0
