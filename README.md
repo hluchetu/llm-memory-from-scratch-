@@ -9,26 +9,43 @@ An article covering the thinking behind this project is at [hluchetu.dev](https:
 ## Quick Start
 
 ```bash
+pip install -e .
 cp .env.example .env
 ```
 
 Set your model credentials in `.env`, then start a conversation:
 
 ```bash
-PYTHONPATH=src python -m agent_memory chat my-thread
+agent-memory chat my-thread
 ```
 
 Use long-term memory by adding a namespace:
 
 ```bash
-PYTHONPATH=src python -m agent_memory chat my-thread --namespace user/hayat
+agent-memory chat my-thread --namespace user/hayat
 ```
 
 Inspect or clear a thread:
 
 ```bash
-PYTHONPATH=src python -m agent_memory show-thread my-thread
-PYTHONPATH=src python -m agent_memory clear-thread my-thread
+agent-memory show-thread my-thread
+agent-memory clear-thread my-thread
+```
+
+## Using as a Library
+
+Install into any project:
+
+```bash
+pip install -e /path/to/agent-memory-from-scratch
+```
+
+Then import directly:
+
+```python
+from agent_memory.agent import Agent, AgentRunner, AgentSession
+from agent_memory.long_term.semantic import KnowledgeMemory
+from agent_memory.long_term.store import MemoryStore
 ```
 
 Supported providers:
