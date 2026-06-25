@@ -26,6 +26,14 @@ memory_extraction:
     - "update": this updates an existing record — use the same key as the existing record
     - "invalidate": this existing record is now wrong or outdated — only "key" is needed
 
+    Use the Existing memories section before creating records:
+    - If the conversation changes, corrects, replaces, or refines an existing memory, return action "update" and reuse that existing memory's key.
+    - If the conversation says an existing memory is no longer true and gives a replacement, return one "update" record with the existing key and the new value.
+    - If the conversation says an existing memory is no longer true and gives no replacement, return action "invalidate" with the existing key.
+    - Only return action "create" when no existing memory represents the same fact, preference, entity, workflow, event, or decision.
+    - Do not invent keys when an existing memory key can be reused.
+    - If several existing memories are relevant, update or invalidate only the records directly contradicted by the conversation.
+
     Return strict JSON only. Do not wrap it in markdown.
 
     Schema:
@@ -41,6 +49,7 @@ memory_extraction:
           "metadata": {}
         },
         {
+          "action": "create",
           "record_type": "entity",
           "key": "short-stable-key",
           "name": "entity name",
@@ -49,6 +58,7 @@ memory_extraction:
           "metadata": {}
         },
         {
+          "action": "create",
           "record_type": "event",
           "key": "short-stable-key",
           "description": "what happened",
@@ -57,6 +67,7 @@ memory_extraction:
           "metadata": {}
         },
         {
+          "action": "create",
           "record_type": "workflow",
           "key": "short-stable-key",
           "steps": ["first step", "second step"],
@@ -64,6 +75,7 @@ memory_extraction:
           "metadata": {}
         },
         {
+          "action": "create",
           "record_type": "preference",
           "key": "short-stable-key",
           "subject": "what the preference is about",

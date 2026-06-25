@@ -28,6 +28,7 @@ def record_to_dict(record: LongTermRecord) -> RecordPayload:
             record.invalidated_at.isoformat() if record.invalidated_at else None
         ),
         "importance": record.importance,
+        "related_ids": list(record.related_ids),
         "metadata": record.metadata,
     }
 
@@ -86,6 +87,10 @@ def record_from_dict(payload: RecordPayload) -> LongTermRecord:
         "expires_at": optional_datetime(payload.get("expires_at")),
         "invalidated_at": optional_datetime(payload.get("invalidated_at")),
         "importance": optional_float(payload.get("importance")),
+        "related_ids": tuple(
+            str(record_id)
+            for record_id in payload.get("related_ids") or []
+        ),
         "metadata": dict(payload.get("metadata") or {}),
     }
 

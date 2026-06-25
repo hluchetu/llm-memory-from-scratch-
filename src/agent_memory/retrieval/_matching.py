@@ -5,15 +5,10 @@ from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
 
-from agent_memory.long_term.decision.decision import DecisionMemory
-from agent_memory.long_term.episodic.event import EventMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
-from agent_memory.long_term.preference.preference import PreferenceMemory
-from agent_memory.long_term.procedural.workflow import WorkflowMemory
 from agent_memory.long_term.search import MemorySearch
-from agent_memory.long_term.semantic.entity import EntityMemory
-from agent_memory.long_term.semantic.knowledge import KnowledgeMemory
+from agent_memory.long_term.text import searchable_text
 
 
 def namespace_matches(
@@ -51,35 +46,6 @@ def record_is_active(
     return record.expires_at is None or record.expires_at > now
 
 
-def searchable_text(record: LongTermRecord) -> str:
-    metadata_values = " ".join(str(value) for value in record.metadata.values())
-
-    if isinstance(record, KnowledgeMemory):
-        return f"{record.key} {record.content} {record.source or ''} {metadata_values}"
-
-    if isinstance(record, EntityMemory):
-        return f"{record.key} {record.name} {record.description} {metadata_values}"
-
-    if isinstance(record, EventMemory):
-        return (
-            f"{record.key} {record.description} "
-            f"{record.occurred_at.isoformat()} {metadata_values}"
-        )
-
-    if isinstance(record, WorkflowMemory):
-        steps = " ".join(record.steps)
-        return f"{record.key} {steps} {metadata_values}"
-
-    if isinstance(record, PreferenceMemory):
-        return f"{record.key} {record.subject} {record.preference} {metadata_values}"
-
-    if isinstance(record, DecisionMemory):
-        rationale = record.rationale or ""
-        return f"{record.key} {record.decision} {rationale} {metadata_values}"
-
-    return f"{record.key} {metadata_values}"
-
-
 IMPORTANCE_WEIGHT = 0.3
 
 
@@ -89,8 +55,29 @@ def importance_boost(record: LongTermRecord) -> float:
     return record.importance * IMPORTANCE_WEIGHT
 
 
+def blend_importance(score: float, record: LongTermRecord) -> float:
+    relevance = clamp_score(score)
+
+    if record.importance is None:
+        return relevance
+
+    importance = clamp_score(record.importance)
+    return clamp_score(
+        relevance * (1 - IMPORTANCE_WEIGHT)
+        + importance * IMPORTANCE_WEIGHT
+    )
+
+
+def clamp_score(score: float) -> float:
+    return max(0.0, min(1.0, score))
+
+
+def tokenize_terms(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
 def tokenize(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
+    return set(tokenize_terms(text))
 
 
 def token_overlap_score(query: str, candidates: Iterable[str]) -> float:

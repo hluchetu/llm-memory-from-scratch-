@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_memory.context.interface import MemoryContextResult
-from agent_memory.context.long_term import format_record
+from agent_memory.context.long_term import format_grouped_records
 from agent_memory.extraction.interface import MemoryExtractionRequest
 from agent_memory.extraction.interface import MemoryExtractionResult
 from agent_memory.extraction.llm import LLMMemoryExtractor
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.store import MemoryStore
+from agent_memory.reflection import MemoryReflector
 from agent_memory.short_term.conversation.state import ConversationState
 
 
@@ -25,11 +26,13 @@ class MemoryManager:
         self,
         stores: list[MemoryStoreConfig],
         extractor: LLMMemoryExtractor | None = None,
+        reflector: MemoryReflector | None = None,
     ) -> None:
         if not stores:
             raise ValueError("MemoryManager requires at least one store.")
         self._stores = stores
         self._extractor = extractor
+        self._reflector = reflector
 
     def inject(
         self,
@@ -49,12 +52,11 @@ class MemoryManager:
         if not records:
             return MemoryContextResult(content="", record_ids=[])
 
-        lines = ["Relevant memory:"]
-        for record in records[:limit]:
-            lines.append(f"- {format_record(record)}")
-
         return MemoryContextResult(
-            content="\n".join(lines),
+            content=format_grouped_records(
+                records[:limit],
+                heading="Relevant memory",
+            ),
             record_ids=[record.id for record in records[:limit]],
         )
 
@@ -92,6 +94,9 @@ class MemoryManager:
                 config.store.put(record)
             for key in result.invalidated_keys:
                 config.store.invalidate(namespace, key)
+
+        if self._reflector is not None and result.records:
+            self._reflector.observe(result.records, namespace)
 
         return result
 

@@ -4,7 +4,7 @@ from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.procedural.workflow import WorkflowMemory
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
-from agent_memory.retrieval._matching import importance_boost
+from agent_memory.retrieval._matching import blend_importance
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.retrieval._matching import token_overlap_score
@@ -51,7 +51,7 @@ class ProceduralMemoryRetriever:
             RetrievalResult(
                 record_id=record.id,
                 source="procedural",
-                score=score + importance_boost(record),
+                score=blend_importance(score, record),
                 relevance_score=score,
                 importance_score=record.importance,
                 reason="matched workflow key or steps",

@@ -8,7 +8,7 @@ from agent_memory.long_term.episodic.event import EventMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
-from agent_memory.retrieval._matching import importance_boost
+from agent_memory.retrieval._matching import blend_importance
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.retrieval._matching import token_overlap_score
@@ -40,7 +40,7 @@ class EpisodicMemoryRetriever:
                 [searchable_text(record)],
             )
             recency_score = normalize_timestamp_score(event_timestamp(record))
-            score = relevance_score + recency_score
+            score = (relevance_score + recency_score) / 2
             scored_records.append((score, relevance_score, recency_score, record))
 
         scored_records.sort(
@@ -51,7 +51,7 @@ class EpisodicMemoryRetriever:
             RetrievalResult(
                 record_id=record.id,
                 source="episodic",
-                score=score + importance_boost(record),
+                score=blend_importance(score, record),
                 relevance_score=relevance_score,
                 recency_score=recency_score,
                 importance_score=record.importance,

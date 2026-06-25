@@ -6,7 +6,8 @@ from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
 from agent_memory.long_term.storage import MemoryStorage
-from agent_memory.retrieval._matching import importance_boost
+from agent_memory.retrieval._matching import blend_importance
+from agent_memory.retrieval._matching import clamp_score
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.vector_store import VectorStore
@@ -47,7 +48,7 @@ class SemanticMemoryRetriever:
             vector=query_vector,
             limit=max(search.limit * 10, search.limit),
         )
-        retrieval_results: list[RetrievalResult] = []
+        results_by_record_id: dict[str, RetrievalResult] = {}
 
         for vector_result in vector_results:
             record = self._storage.get_by_id(vector_result.record_id)
@@ -61,21 +62,67 @@ class SemanticMemoryRetriever:
             if vector_result.score <= 0:
                 continue
 
-            retrieval_results.append(
-                RetrievalResult(
-                    record_id=record.id,
-                    source="semantic",
-                    score=vector_result.score + importance_boost(record),
-                    relevance_score=vector_result.score,
-                    importance_score=record.importance,
-                    reason="cosine similarity from Chroma vector search",
-                )
+            relevance_score = clamp_score(vector_result.score)
+            results_by_record_id[record.id] = RetrievalResult(
+                record_id=record.id,
+                source="semantic",
+                score=blend_importance(relevance_score, record),
+                relevance_score=relevance_score,
+                importance_score=record.importance,
+                reason="cosine similarity from Chroma vector search",
+            )
+            self._add_related_results(
+                parent_record=record,
+                parent_relevance_score=relevance_score,
+                search=search,
+                results_by_record_id=results_by_record_id,
             )
 
-            if len(retrieval_results) >= search.limit:
+            if len(results_by_record_id) >= search.limit:
                 break
 
-        return retrieval_results
+        retrieval_results = sorted(
+            results_by_record_id.values(),
+            key=lambda result: result.score,
+            reverse=True,
+        )
+        return retrieval_results[: search.limit]
+
+    def _add_related_results(
+        self,
+        parent_record: LongTermRecord,
+        parent_relevance_score: float,
+        search: MemorySearch,
+        results_by_record_id: dict[str, RetrievalResult],
+    ) -> None:
+        related_relevance_score = parent_relevance_score * 0.9
+
+        for related_id in parent_record.related_ids:
+            if related_id in results_by_record_id:
+                continue
+
+            related_record = self._storage.get_by_id(related_id)
+
+            if related_record is None:
+                continue
+
+            if not record_matches_search(related_record, search):
+                continue
+
+            results_by_record_id[related_record.id] = RetrievalResult(
+                record_id=related_record.id,
+                source="semantic",
+                score=blend_importance(
+                    related_relevance_score,
+                    related_record,
+                ),
+                relevance_score=related_relevance_score,
+                importance_score=related_record.importance,
+                reason=(
+                    "one-hop related memory from semantic match "
+                    f"{parent_record.id}"
+                )
+            )
 
     def delete(self, record_id: str) -> None:
         self._vector_store.delete(record_id)

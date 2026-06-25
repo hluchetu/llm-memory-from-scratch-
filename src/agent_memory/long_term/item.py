@@ -38,6 +38,7 @@ class LongTermRecord:
     expires_at: datetime | None = None
     invalidated_at: datetime | None = None
     importance: float | None = None
+    related_ids: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

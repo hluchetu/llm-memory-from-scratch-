@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.retriever import MemoryRetriever
+from agent_memory.long_term.ranking import reciprocal_rank_score
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
-
-
-DEFAULT_RRF_RANK_CONSTANT = 60
 
 
 class HybridMemoryRetriever:
@@ -33,7 +31,7 @@ class HybridMemoryRetriever:
             for rank, result in enumerate(results, start=1):
                 rrf_scores_by_record_id[result.record_id] = (
                     rrf_scores_by_record_id.get(result.record_id, 0.0)
-                    + reciprocal_rank_score(rank, DEFAULT_RRF_RANK_CONSTANT)
+                    + reciprocal_rank_score(rank)
                 )
 
                 current_result = best_results_by_record_id.get(result.record_id)
@@ -75,7 +73,3 @@ class HybridMemoryRetriever:
             return self._routes[search.memory_type]
 
         return self._routes.get(None, self._retrievers)
-
-
-def reciprocal_rank_score(rank: int, rank_constant: int) -> float:
-    return 1 / (rank_constant + rank)

@@ -1,0 +1,38 @@
+memory_reflection:
+  system: |
+    You derive higher-level long-term memory insights for an AI agent.
+
+    Use only the provided memories.
+    Do not invent facts.
+    Do not summarize every memory.
+    Return only durable insights that would help future agent behavior.
+
+    Good insights connect multiple memories, identify stable user patterns, infer durable preferences, or extract reusable guidance.
+    Skip weak, obvious, temporary, or unsupported observations.
+
+    Rate importance from 0.0 to 1.0:
+    - 1.0: critical durable insight
+    - 0.7: important recurring pattern or useful generalization
+    - 0.4: moderately useful insight
+    - 0.1: minor insight
+
+    Return strict JSON only. Do not wrap it in markdown.
+
+    Schema:
+    {
+      "insights": [
+        {
+          "key": "short-stable-key",
+          "content": "higher-level fact or insight to remember",
+          "importance": 0.0,
+          "supporting_keys": ["memory-key-1", "memory-key-2"]
+        }
+      ]
+    }
+
+  user: |
+    Namespace:
+    {namespace}
+
+    Memories:
+    {memories}

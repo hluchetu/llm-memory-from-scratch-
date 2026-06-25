@@ -12,14 +12,29 @@ from agent_memory.long_term.semantic import KnowledgeMemory
 from agent_memory.long_term.store import MemoryStore
 
 
+DEFAULT_TYPE_HEADINGS = {
+    "semantic": "Known facts",
+    "entity": "Known entities",
+    "episodic": "Relevant events",
+    "procedural": "Known procedures",
+    "preference": "Known preferences",
+    "decision": "Known decisions",
+}
+
+
 class LongTermMemoryContextBuilder:
     def __init__(
         self,
         memory_store: MemoryStore,
         heading: str = "Relevant long-term memory",
+        type_headings: dict[str, str] | None = None,
     ) -> None:
         self._memory_store = memory_store
         self._heading = heading
+        self._type_headings = {
+            **DEFAULT_TYPE_HEADINGS,
+            **(type_headings or {}),
+        }
 
     def build(self, request: MemoryContextRequest) -> MemoryContextResult:
         records = self._memory_store.search(
@@ -36,15 +51,46 @@ class LongTermMemoryContextBuilder:
                 record_ids=[],
             )
 
-        lines = [f"{self._heading}:"]
-
-        for record in records:
-            lines.append(f"- {format_record(record)}")
-
         return MemoryContextResult(
-            content="\n".join(lines),
+            content=format_grouped_records(
+                records,
+                heading=self._heading,
+                type_headings=self._type_headings,
+            ),
             record_ids=[record.id for record in records],
         )
+
+
+def format_grouped_records(
+    records: list[LongTermRecord],
+    heading: str = "Relevant long-term memory",
+    type_headings: dict[str, str] | None = None,
+) -> str:
+    resolved_type_headings = {
+        **DEFAULT_TYPE_HEADINGS,
+        **(type_headings or {}),
+    }
+    lines = [f"{heading}:"]
+
+    for memory_type, grouped_records in group_records_by_type(records).items():
+        lines.append("")
+        lines.append(f"{resolved_type_headings.get(memory_type, memory_type.title())}:")
+
+        for record in grouped_records:
+            lines.append(f"- {format_record(record)}")
+
+    return "\n".join(lines)
+
+
+def group_records_by_type(
+    records: list[LongTermRecord],
+) -> dict[str, list[LongTermRecord]]:
+    grouped_records: dict[str, list[LongTermRecord]] = {}
+
+    for record in records:
+        grouped_records.setdefault(record.memory_type, []).append(record)
+
+    return grouped_records
 
 
 def format_record(record: LongTermRecord) -> str:

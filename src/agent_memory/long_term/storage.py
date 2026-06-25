@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from agent_memory.long_term.item import LongTermRecord
+from agent_memory.long_term.item import MemoryType
 
 
 class MemoryStorage(Protocol):
@@ -20,6 +21,14 @@ class MemoryStorage(Protocol):
         ...
 
     def get_many(self, ids: list[str]) -> list[LongTermRecord]:
+        ...
+
+    def list(
+        self,
+        namespace: tuple[str, ...],
+        memory_type: MemoryType | None = None,
+        include_invalidated: bool = False,
+    ) -> list[LongTermRecord]:
         ...
 
     def delete(
@@ -63,6 +72,30 @@ class InMemoryStorage:
 
             if record is not None:
                 records.append(record)
+
+        return records
+
+    def list(
+        self,
+        namespace: tuple[str, ...],
+        memory_type: MemoryType | None = None,
+        include_invalidated: bool = False,
+    ) -> list[LongTermRecord]:
+        records = [
+            record
+            for (record_namespace, _), record in self._records_by_key.items()
+            if record_namespace == namespace
+        ]
+
+        if memory_type is not None:
+            records = [
+                record for record in records if record.memory_type == memory_type
+            ]
+
+        if not include_invalidated:
+            records = [
+                record for record in records if record.invalidated_at is None
+            ]
 
         return records
 

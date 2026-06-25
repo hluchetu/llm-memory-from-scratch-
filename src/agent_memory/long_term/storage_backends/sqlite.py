@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from agent_memory.long_term.item import LongTermRecord
+from agent_memory.long_term.item import MemoryType
 from agent_memory.long_term.serialization import record_from_dict
 from agent_memory.long_term.serialization import record_to_dict
 from agent_memory.retry import RetryConfig
@@ -134,6 +135,40 @@ class SQLiteMemoryStorage:
             records_by_id[record_id]
             for record_id in ids
             if record_id in records_by_id
+        ]
+
+    def list(
+        self,
+        namespace: tuple[str, ...],
+        memory_type: MemoryType | None = None,
+        include_invalidated: bool = False,
+    ) -> list[LongTermRecord]:
+        filters = ["namespace = ?"]
+        values: list[object] = [serialize_namespace(namespace)]
+
+        if memory_type is not None:
+            filters.append("memory_type = ?")
+            values.append(memory_type)
+
+        if not include_invalidated:
+            filters.append("invalidated_at IS NULL")
+
+        where_clause = " AND ".join(filters)
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT record_json
+                FROM long_term_records
+                WHERE {where_clause}
+                ORDER BY created_at DESC
+                """,
+                values,
+            ).fetchall()
+
+        return [
+            record_from_dict(json.loads(str(row["record_json"])))
+            for row in rows
         ]
 
     def delete(
