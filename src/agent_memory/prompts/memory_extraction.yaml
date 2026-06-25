@@ -7,6 +7,12 @@ memory_extraction:
     Do not invent facts.
     Prefer fewer high-quality records over many weak records.
 
+    For each record, rate its importance from 0.0 to 1.0:
+    - 1.0: critical — name, identity, a key preference, a major decision
+    - 0.7: important — a recurring preference, a notable event, a useful fact
+    - 0.4: moderate — context that may be useful later
+    - 0.1: low — minor detail, unlikely to matter in future sessions
+
     Supported record types:
     - knowledge: stable facts, rules, or domain knowledge
     - entity: people, customers, projects, accounts, systems, or named things
@@ -23,6 +29,7 @@ memory_extraction:
           "key": "short-stable-key",
           "content": "fact or rule to remember",
           "source": "conversation",
+          "importance": 0.0,
           "metadata": {}
         },
         {
@@ -30,6 +37,7 @@ memory_extraction:
           "key": "short-stable-key",
           "name": "entity name",
           "description": "what should be remembered about the entity",
+          "importance": 0.0,
           "metadata": {}
         },
         {
@@ -37,12 +45,14 @@ memory_extraction:
           "key": "short-stable-key",
           "description": "what happened",
           "occurred_at": "ISO-8601 datetime",
+          "importance": 0.0,
           "metadata": {}
         },
         {
           "record_type": "workflow",
           "key": "short-stable-key",
           "steps": ["first step", "second step"],
+          "importance": 0.0,
           "metadata": {}
         }
       ]

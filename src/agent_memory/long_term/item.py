@@ -37,6 +37,7 @@ class LongTermRecord:
     created_at: datetime = field(default_factory=utc_now)
     expires_at: datetime | None = None
     invalidated_at: datetime | None = None
+    importance: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

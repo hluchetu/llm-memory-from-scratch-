@@ -206,6 +206,7 @@ def build_record(
     common_fields = {
         "namespace": namespace,
         "key": required_string(raw_record, "key"),
+        "importance": optional_float(raw_record.get("importance")),
         "metadata": build_metadata(raw_record, source_item_ids),
     }
 
@@ -309,3 +310,13 @@ def parse_datetime(value: str | datetime) -> datetime:
         return value
 
     return datetime.fromisoformat(str(value))
+
+
+def optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+        return max(0.0, min(1.0, result))
+    except (TypeError, ValueError):
+        return None

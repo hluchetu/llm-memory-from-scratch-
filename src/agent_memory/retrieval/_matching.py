@@ -71,6 +71,15 @@ def searchable_text(record: LongTermRecord) -> str:
     return f"{record.key} {metadata_values}"
 
 
+IMPORTANCE_WEIGHT = 0.3
+
+
+def importance_boost(record: LongTermRecord) -> float:
+    if record.importance is None:
+        return 0.0
+    return record.importance * IMPORTANCE_WEIGHT
+
+
 def tokenize(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
 

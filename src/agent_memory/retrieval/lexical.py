@@ -6,6 +6,7 @@ from agent_memory.long_term.search import RetrievalResult
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.retrieval._matching import token_overlap_score
+from agent_memory.retrieval._matching import importance_boost
 
 
 class LexicalMemoryRetriever:
@@ -34,8 +35,9 @@ class LexicalMemoryRetriever:
             RetrievalResult(
                 record_id=record.id,
                 source="lexical",
-                score=score,
+                score=score + importance_boost(record),
                 relevance_score=score,
+                importance_score=record.importance,
                 reason="matched query tokens against record text",
             )
             for score, record in scored_records[: search.limit]

@@ -5,6 +5,7 @@ from typing import Protocol
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
+from agent_memory.retrieval._matching import importance_boost
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
 from agent_memory.vector_store import VectorStore
@@ -63,8 +64,9 @@ class SemanticMemoryRetriever:
                 RetrievalResult(
                     record_id=record.id,
                     source="semantic",
-                    score=vector_result.score,
+                    score=vector_result.score + importance_boost(record),
                     relevance_score=vector_result.score,
+                    importance_score=record.importance,
                     reason="cosine similarity from Chroma vector search",
                 )
             )
