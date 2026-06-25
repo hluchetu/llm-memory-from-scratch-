@@ -7,6 +7,7 @@ from typing import Any
 from agent_memory.errors import MemoryExtractionError
 from agent_memory.extraction.interface import MemoryExtractionRequest
 from agent_memory.extraction.interface import MemoryExtractionResult
+from agent_memory.extraction.triggers import ExtractionTrigger
 from agent_memory.llm.interface import ChatModel
 from agent_memory.llm.message import HumanMessage
 from agent_memory.llm.message import SystemMessage
@@ -27,10 +28,22 @@ from agent_memory.short_term.conversation.state import ToolResult
 
 
 class LLMMemoryExtractor:
-    def __init__(self, model: ChatModel) -> None:
+    def __init__(
+        self,
+        model: ChatModel,
+        trigger: ExtractionTrigger | None = None,
+    ) -> None:
         self._model = model
+        self._trigger = trigger
 
     def extract(self, request: MemoryExtractionRequest) -> MemoryExtractionResult:
+        if self._trigger is not None and not self._trigger.should_extract(request.conversation):
+            return MemoryExtractionResult(
+                records=[],
+                source_item_ids=[],
+                skipped_reason="Extraction skipped by trigger.",
+            )
+
         items = select_items(
             conversation=request.conversation,
             since_item_id=request.since_item_id,
