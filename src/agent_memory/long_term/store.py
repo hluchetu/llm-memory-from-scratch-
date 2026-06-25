@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime
+from datetime import timezone
+
 from agent_memory.long_term.retriever import MemoryRetriever
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
@@ -65,6 +69,23 @@ class MemoryStore:
         record_ids = [result.record_id for result in results[:limit]]
 
         return self._storage.get_many(record_ids)
+
+    def invalidate(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> bool:
+        record = self._storage.get(namespace, key)
+
+        if record is None or record.invalidated_at is not None:
+            return False
+
+        invalidated = replace(
+            record,
+            invalidated_at=datetime.now(timezone.utc),
+        )
+        self._storage.put(invalidated)
+        return True
 
     def delete(
         self,
