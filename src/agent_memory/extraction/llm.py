@@ -204,13 +204,16 @@ def build_records(
                 invalidated_keys.append(key)
             continue
 
-        records.append(
-            build_record(
-                raw_record=raw_record,
-                namespace=namespace,
-                source_item_ids=source_item_ids,
+        try:
+            records.append(
+                build_record(
+                    raw_record=raw_record,
+                    namespace=namespace,
+                    source_item_ids=source_item_ids,
+                )
             )
-        )
+        except (ValueError, KeyError):
+            continue
 
     return records, invalidated_keys
 
