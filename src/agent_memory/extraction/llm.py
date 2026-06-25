@@ -64,6 +64,11 @@ class LLMMemoryExtractor:
             prompt_name="memory_extraction",
         )
         source_item_ids = [item.id for item in items]
+        existing_memories = fetch_existing_memories(
+            store=request.memory_store,
+            namespace=request.namespace,
+            query=format_items(items[:5]),
+        )
 
         try:
             response = self._model.invoke(
@@ -73,12 +78,13 @@ class LLMMemoryExtractor:
                         content=prompt["user"].format(
                             namespace="/".join(request.namespace),
                             conversation=format_items(items),
+                            existing_memories=existing_memories,
                         )
                     ),
                 ]
             )
             payload = parse_json_object(response.content)
-            records = build_records(
+            records, invalidated_keys = build_records(
                 payload=payload,
                 namespace=request.namespace,
                 source_item_ids=source_item_ids,
@@ -88,7 +94,7 @@ class LLMMemoryExtractor:
                 "Failed to extract long-term memory records."
             ) from error
 
-        if not records:
+        if not records and not invalidated_keys:
             return MemoryExtractionResult(
                 records=[],
                 source_item_ids=source_item_ids,
@@ -97,6 +103,7 @@ class LLMMemoryExtractor:
 
         return MemoryExtractionResult(
             records=records,
+            invalidated_keys=invalidated_keys,
             source_item_ids=source_item_ids,
         )
 
@@ -176,16 +183,25 @@ def build_records(
     payload: dict[str, Any],
     namespace: tuple[str, ...],
     source_item_ids: list[str],
-) -> list[LongTermRecord]:
+) -> tuple[list[LongTermRecord], list[str]]:
     raw_records = payload.get("records") or []
 
     if not isinstance(raw_records, list):
         raise ValueError("Memory extraction records must be a list.")
 
     records: list[LongTermRecord] = []
+    invalidated_keys: list[str] = []
 
     for raw_record in raw_records:
         if not isinstance(raw_record, dict):
+            continue
+
+        action = str(raw_record.get("action", "create")).strip().lower()
+
+        if action == "invalidate":
+            key = optional_string(raw_record.get("key"))
+            if key:
+                invalidated_keys.append(key)
             continue
 
         records.append(
@@ -196,7 +212,46 @@ def build_records(
             )
         )
 
-    return records
+    return records, invalidated_keys
+
+
+def fetch_existing_memories(
+    store: Any,
+    namespace: tuple[str, ...],
+    query: str,
+) -> str:
+    if store is None:
+        return "None."
+
+    try:
+        records = store.search(namespace=namespace, query=query, limit=10)
+    except Exception:
+        return "None."
+
+    if not records:
+        return "None."
+
+    lines = []
+    for record in records:
+        lines.append(f"- key={record.key} type={record.memory_type}: {searchable_text_summary(record)}")
+
+    return "\n".join(lines)
+
+
+def searchable_text_summary(record: LongTermRecord) -> str:
+    if isinstance(record, KnowledgeMemory):
+        return record.content
+    if isinstance(record, EntityMemory):
+        return f"{record.name}: {record.description}"
+    if isinstance(record, EventMemory):
+        return record.description
+    if isinstance(record, WorkflowMemory):
+        return "; ".join(record.steps[:3])
+    if isinstance(record, PreferenceMemory):
+        return f"{record.subject}: {record.preference}"
+    if isinstance(record, DecisionMemory):
+        return record.decision
+    return record.key
 
 
 def build_record(

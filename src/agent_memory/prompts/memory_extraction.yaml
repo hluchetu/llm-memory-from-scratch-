@@ -21,12 +21,18 @@ memory_extraction:
     - preference: what the user wants, likes, or prefers — style, format, behaviour
     - decision: something that was agreed, chosen, or decided that should influence future behaviour
 
+    Each record must include an "action" field:
+    - "create": this is new information not seen before
+    - "update": this updates an existing record — use the same key as the existing record
+    - "invalidate": this existing record is now wrong or outdated — only "key" is needed
+
     Return strict JSON only. Do not wrap it in markdown.
 
     Schema:
     {
       "records": [
         {
+          "action": "create",
           "record_type": "knowledge",
           "key": "short-stable-key",
           "content": "fact or rule to remember",
@@ -67,6 +73,7 @@ memory_extraction:
           "metadata": {}
         },
         {
+          "action": "create",
           "record_type": "decision",
           "key": "short-stable-key",
           "decision": "what was decided",
@@ -74,6 +81,10 @@ memory_extraction:
           "outcome": "what happened as a result (optional)",
           "importance": 0.0,
           "metadata": {}
+        },
+        {
+          "action": "invalidate",
+          "key": "key-of-record-to-invalidate"
         }
       ]
     }
@@ -81,6 +92,9 @@ memory_extraction:
   user: |
     Namespace:
     {namespace}
+
+    Existing memories:
+    {existing_memories}
 
     Conversation:
     {conversation}
