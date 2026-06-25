@@ -12,6 +12,9 @@ from agent_memory.llm.interface import ChatModel
 from agent_memory.llm.message import HumanMessage
 from agent_memory.llm.message import SystemMessage
 from agent_memory.prompts.loader import load_prompt
+from agent_memory.retry import RetryConfig
+from agent_memory.retry import is_transient_llm_error
+from agent_memory.retry import with_retry
 
 
 @dataclass(frozen=True)
@@ -292,6 +295,7 @@ class SummarizeOldMessagesProcessor:
         model: ChatModel,
         trigger_message_count: int,
         keep_recent_messages: int,
+        retry: RetryConfig | None = None,
     ) -> None:
         if trigger_message_count <= 0:
             raise InvalidProcessorConfigError(
@@ -311,6 +315,7 @@ class SummarizeOldMessagesProcessor:
         self._model = model
         self._trigger_message_count = trigger_message_count
         self._keep_recent_messages = keep_recent_messages
+        self._retry = retry or RetryConfig()
 
     def process(
         self,
@@ -348,17 +353,18 @@ class SummarizeOldMessagesProcessor:
         )
 
         try:
-            response = self._model.invoke(
-                [
-                    SystemMessage(
-                        content=prompt["system"]
-                    ),
-                    HumanMessage(
-                        content=prompt["user"].format(
-                            conversation=self._format_messages(messages)
-                        )
-                    ),
-                ]
+            llm_messages = [
+                SystemMessage(content=prompt["system"]),
+                HumanMessage(
+                    content=prompt["user"].format(
+                        conversation=self._format_messages(messages)
+                    )
+                ),
+            ]
+            response = with_retry(
+                fn=lambda: self._model.invoke(llm_messages),
+                config=self._retry,
+                is_transient=is_transient_llm_error,
             )
         except Exception as error:
             raise MessageSummarizationError(

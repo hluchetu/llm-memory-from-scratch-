@@ -9,6 +9,9 @@ from agent_memory.extraction.interface import MemoryExtractionRequest
 from agent_memory.extraction.interface import MemoryExtractionResult
 from agent_memory.extraction.triggers import ExtractionTrigger
 from agent_memory.llm.interface import ChatModel
+from agent_memory.retry import RetryConfig
+from agent_memory.retry import is_transient_llm_error
+from agent_memory.retry import with_retry
 from agent_memory.llm.message import HumanMessage
 from agent_memory.llm.message import SystemMessage
 from agent_memory.long_term.item import LongTermRecord
@@ -34,9 +37,11 @@ class LLMMemoryExtractor:
         self,
         model: ChatModel,
         trigger: ExtractionTrigger | None = None,
+        retry: RetryConfig | None = None,
     ) -> None:
         self._model = model
         self._trigger = trigger
+        self._retry = retry or RetryConfig()
 
     def extract(self, request: MemoryExtractionRequest) -> MemoryExtractionResult:
         if self._trigger is not None and not self._trigger.should_extract(request.conversation):
@@ -71,17 +76,20 @@ class LLMMemoryExtractor:
         )
 
         try:
-            response = self._model.invoke(
-                [
-                    SystemMessage(content=prompt["system"]),
-                    HumanMessage(
-                        content=prompt["user"].format(
-                            namespace="/".join(request.namespace),
-                            conversation=format_items(items),
-                            existing_memories=existing_memories,
-                        )
-                    ),
-                ]
+            messages = [
+                SystemMessage(content=prompt["system"]),
+                HumanMessage(
+                    content=prompt["user"].format(
+                        namespace="/".join(request.namespace),
+                        conversation=format_items(items),
+                        existing_memories=existing_memories,
+                    )
+                ),
+            ]
+            response = with_retry(
+                fn=lambda: self._model.invoke(messages),
+                config=self._retry,
+                is_transient=is_transient_llm_error,
             )
             payload = parse_json_object(response.content)
             records, invalidated_keys = build_records(

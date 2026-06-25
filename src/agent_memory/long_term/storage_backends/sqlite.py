@@ -7,15 +7,30 @@ from pathlib import Path
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.serialization import record_from_dict
 from agent_memory.long_term.serialization import record_to_dict
+from agent_memory.retry import RetryConfig
+from agent_memory.retry import is_transient_storage_error
+from agent_memory.retry import with_retry
 
 
 class SQLiteMemoryStorage:
-    def __init__(self, path: str | Path) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        retry: RetryConfig | None = None,
+    ) -> None:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._retry = retry or RetryConfig()
         self._initialize_database()
 
     def put(self, record: LongTermRecord) -> None:
+        with_retry(
+            fn=lambda: self._put(record),
+            config=self._retry,
+            is_transient=is_transient_storage_error,
+        )
+
+    def _put(self, record: LongTermRecord) -> None:
         payload = record_to_dict(record)
 
         with self._connect() as connection:
