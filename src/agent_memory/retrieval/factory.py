@@ -19,16 +19,17 @@ def create_memory_store(
     storage: MemoryStorage | None = None,
 ) -> MemoryStore:
     resolved_settings = settings or get_settings()
+    resolved_storage = storage or SQLiteMemoryStorage(resolved_settings.long_term_database_path)
 
     return MemoryStore(
-        storage=storage or SQLiteMemoryStorage(resolved_settings.long_term_database_path),
+        storage=resolved_storage,
         retrievers=[
-            _create_memory_retriever(resolved_settings),
+            _create_memory_retriever(resolved_settings, resolved_storage),
         ],
     )
 
 
-def _create_memory_retriever(settings: Settings) -> HybridMemoryRetriever:
+def _create_memory_retriever(settings: Settings, storage: MemoryStorage) -> HybridMemoryRetriever:
     lexical = LexicalMemoryRetriever()
     episodic = EpisodicMemoryRetriever()
     procedural = ProceduralMemoryRetriever()
@@ -57,6 +58,7 @@ def _create_memory_retriever(settings: Settings) -> HybridMemoryRetriever:
             path=settings.vector_store_path or settings.memory_directory / "chroma",
             collection_name=settings.vector_store_collection,
         ),
+        storage=storage,
     )
 
     return HybridMemoryRetriever(

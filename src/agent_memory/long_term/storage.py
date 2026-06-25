@@ -16,6 +16,9 @@ class MemoryStorage(Protocol):
     ) -> LongTermRecord | None:
         ...
 
+    def get_by_id(self, record_id: str) -> LongTermRecord | None:
+        ...
+
     def get_many(self, ids: list[str]) -> list[LongTermRecord]:
         ...
 
@@ -48,6 +51,9 @@ class InMemoryStorage:
         key: str,
     ) -> LongTermRecord | None:
         return self._records_by_key.get((namespace, key))
+
+    def get_by_id(self, record_id: str) -> LongTermRecord | None:
+        return self._records_by_id.get(record_id)
 
     def get_many(self, ids: list[str]) -> list[LongTermRecord]:
         records: list[LongTermRecord] = []

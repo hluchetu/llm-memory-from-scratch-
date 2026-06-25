@@ -5,6 +5,7 @@ from typing import Protocol
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import RetrievalResult
+from agent_memory.long_term.storage import MemoryStorage
 from agent_memory.retrieval._matching import importance_boost
 from agent_memory.retrieval._matching import record_matches_search
 from agent_memory.retrieval._matching import searchable_text
@@ -21,14 +22,14 @@ class SemanticMemoryRetriever:
         self,
         embedder: TextEmbedder,
         vector_store: VectorStore,
+        storage: MemoryStorage,
     ) -> None:
         self._embedder = embedder
         self._vector_store = vector_store
-        self._records: dict[str, LongTermRecord] = {}
+        self._storage = storage
 
     def add(self, record: LongTermRecord) -> None:
         document = searchable_text(record)
-        self._records[record.id] = record
         self._vector_store.upsert(
             record_id=record.id,
             vector=self._embedder.embed(document),
@@ -49,7 +50,7 @@ class SemanticMemoryRetriever:
         retrieval_results: list[RetrievalResult] = []
 
         for vector_result in vector_results:
-            record = self._records.get(vector_result.record_id)
+            record = self._storage.get_by_id(vector_result.record_id)
 
             if record is None:
                 continue
@@ -77,5 +78,4 @@ class SemanticMemoryRetriever:
         return retrieval_results
 
     def delete(self, record_id: str) -> None:
-        self._records.pop(record_id, None)
         self._vector_store.delete(record_id)

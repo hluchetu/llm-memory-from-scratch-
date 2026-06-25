@@ -78,6 +78,22 @@ class SQLiteMemoryStorage:
 
         return record_from_dict(json.loads(str(row["record_json"])))
 
+    def get_by_id(self, record_id: str) -> LongTermRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT record_json
+                FROM long_term_records
+                WHERE id = ?
+                """,
+                (record_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return record_from_dict(json.loads(str(row["record_json"])))
+
     def get_many(self, ids: list[str]) -> list[LongTermRecord]:
         if not ids:
             return []
