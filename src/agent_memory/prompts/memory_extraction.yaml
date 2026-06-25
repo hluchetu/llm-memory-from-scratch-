@@ -18,6 +18,8 @@ memory_extraction:
     - entity: people, customers, projects, accounts, systems, or named things
     - event: something that happened at a point in time
     - workflow: ordered steps or reusable procedures
+    - preference: what the user wants, likes, or prefers — style, format, behaviour
+    - decision: something that was agreed, chosen, or decided that should influence future behaviour
 
     Return strict JSON only. Do not wrap it in markdown.
 
@@ -52,6 +54,24 @@ memory_extraction:
           "record_type": "workflow",
           "key": "short-stable-key",
           "steps": ["first step", "second step"],
+          "importance": 0.0,
+          "metadata": {}
+        },
+        {
+          "record_type": "preference",
+          "key": "short-stable-key",
+          "subject": "what the preference is about",
+          "preference": "the actual preference",
+          "confidence": 1.0,
+          "importance": 0.0,
+          "metadata": {}
+        },
+        {
+          "record_type": "decision",
+          "key": "short-stable-key",
+          "decision": "what was decided",
+          "rationale": "why it was decided (optional)",
+          "outcome": "what happened as a result (optional)",
           "importance": 0.0,
           "metadata": {}
         }

@@ -13,7 +13,9 @@ from agent_memory.llm.message import HumanMessage
 from agent_memory.llm.message import SystemMessage
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import utc_now
+from agent_memory.long_term.decision import DecisionMemory
 from agent_memory.long_term.episodic import EventMemory
+from agent_memory.long_term.preference import PreferenceMemory
 from agent_memory.long_term.procedural import WorkflowMemory
 from agent_memory.long_term.semantic import EntityMemory
 from agent_memory.long_term.semantic import KnowledgeMemory
@@ -237,6 +239,22 @@ def build_record(
         return WorkflowMemory(
             **common_fields,
             steps=required_string_list(raw_record, "steps"),
+        )
+
+    if record_type == "preference":
+        return PreferenceMemory(
+            **common_fields,
+            subject=required_string(raw_record, "subject"),
+            preference=required_string(raw_record, "preference"),
+            confidence=float(raw_record.get("confidence") or 1.0),
+        )
+
+    if record_type == "decision":
+        return DecisionMemory(
+            **common_fields,
+            decision=required_string(raw_record, "decision"),
+            rationale=optional_string(raw_record.get("rationale")),
+            outcome=optional_string(raw_record.get("outcome")),
         )
 
     raise ValueError(f"Unsupported extracted record type: {record_type}")

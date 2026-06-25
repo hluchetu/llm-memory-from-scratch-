@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from agent_memory.context.interface import MemoryContextRequest
 from agent_memory.context.interface import MemoryContextResult
+from agent_memory.long_term.decision import DecisionMemory
 from agent_memory.long_term.episodic import EventMemory
 from agent_memory.long_term.item import LongTermRecord
+from agent_memory.long_term.preference import PreferenceMemory
 from agent_memory.long_term.procedural import WorkflowMemory
 from agent_memory.long_term.semantic import EntityMemory
 from agent_memory.long_term.semantic import KnowledgeMemory
@@ -59,5 +61,16 @@ def format_record(record: LongTermRecord) -> str:
     if isinstance(record, WorkflowMemory):
         steps = "; ".join(record.steps)
         return f"{record.key}: {steps}"
+
+    if isinstance(record, PreferenceMemory):
+        return f"{record.subject}: {record.preference}"
+
+    if isinstance(record, DecisionMemory):
+        result = f"{record.decision}"
+        if record.rationale:
+            result += f" Reason: {record.rationale}."
+        if record.outcome:
+            result += f" Outcome: {record.outcome}."
+        return result
 
     return f"{record.key}: {record.metadata}"

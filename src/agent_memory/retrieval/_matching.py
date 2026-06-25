@@ -5,9 +5,11 @@ from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
 
+from agent_memory.long_term.decision.decision import DecisionMemory
 from agent_memory.long_term.episodic.event import EventMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
+from agent_memory.long_term.preference.preference import PreferenceMemory
 from agent_memory.long_term.procedural.workflow import WorkflowMemory
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.semantic.entity import EntityMemory
@@ -67,6 +69,13 @@ def searchable_text(record: LongTermRecord) -> str:
     if isinstance(record, WorkflowMemory):
         steps = " ".join(record.steps)
         return f"{record.key} {steps} {metadata_values}"
+
+    if isinstance(record, PreferenceMemory):
+        return f"{record.key} {record.subject} {record.preference} {metadata_values}"
+
+    if isinstance(record, DecisionMemory):
+        rationale = record.rationale or ""
+        return f"{record.key} {record.decision} {rationale} {metadata_values}"
 
     return f"{record.key} {metadata_values}"
 

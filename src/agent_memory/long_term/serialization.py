@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from agent_memory.long_term.decision import DecisionMemory
 from agent_memory.long_term.episodic import EventMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
+from agent_memory.long_term.preference import PreferenceMemory
 from agent_memory.long_term.procedural import WorkflowMemory
 from agent_memory.long_term.semantic import EntityMemory
 from agent_memory.long_term.semantic import KnowledgeMemory
@@ -25,6 +27,7 @@ def record_to_dict(record: LongTermRecord) -> RecordPayload:
         "invalidated_at": (
             record.invalidated_at.isoformat() if record.invalidated_at else None
         ),
+        "importance": record.importance,
         "metadata": record.metadata,
     }
 
@@ -51,6 +54,20 @@ def record_to_dict(record: LongTermRecord) -> RecordPayload:
         payload["steps"] = record.steps
         return payload
 
+    if isinstance(record, PreferenceMemory):
+        payload["record_type"] = "preference"
+        payload["subject"] = record.subject
+        payload["preference"] = record.preference
+        payload["confidence"] = record.confidence
+        return payload
+
+    if isinstance(record, DecisionMemory):
+        payload["record_type"] = "decision"
+        payload["decision"] = record.decision
+        payload["rationale"] = record.rationale
+        payload["outcome"] = record.outcome
+        return payload
+
     raise TypeError(f"Unsupported long-term record type: {type(record).__name__}")
 
 
@@ -68,6 +85,7 @@ def record_from_dict(payload: RecordPayload) -> LongTermRecord:
         "created_at": parse_datetime(payload["created_at"]),
         "expires_at": optional_datetime(payload.get("expires_at")),
         "invalidated_at": optional_datetime(payload.get("invalidated_at")),
+        "importance": optional_float(payload.get("importance")),
         "metadata": dict(payload.get("metadata") or {}),
     }
 
@@ -98,6 +116,22 @@ def record_from_dict(payload: RecordPayload) -> LongTermRecord:
             steps=[str(step) for step in payload.get("steps") or []],
         )
 
+    if record_type == "preference":
+        return PreferenceMemory(
+            **common_fields,
+            subject=str(payload["subject"]),
+            preference=str(payload["preference"]),
+            confidence=float(payload.get("confidence", 1.0)),
+        )
+
+    if record_type == "decision":
+        return DecisionMemory(
+            **common_fields,
+            decision=str(payload["decision"]),
+            rationale=optional_string(payload.get("rationale")),
+            outcome=optional_string(payload.get("outcome")),
+        )
+
     raise ValueError(f"Unsupported long-term record type: {record_type}")
 
 
@@ -120,3 +154,12 @@ def optional_string(value: Any) -> str | None:
         return None
 
     return str(value)
+
+
+def optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
