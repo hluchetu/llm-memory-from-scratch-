@@ -134,18 +134,11 @@ def select_items(
     if max_items is not None and max_items <= 0:
         raise ValueError("max_items must be greater than 0.")
 
-    items = conversation.items
-
-    if since_item_id is not None:
-        start_index = next(
-            (
-                index + 1
-                for index, item in enumerate(items)
-                if item.id == since_item_id
-            ),
-            0,
-        )
-        items = items[start_index:]
+    items = (
+        conversation.items_since(since_item_id)
+        if since_item_id is not None
+        else conversation.items
+    )
 
     if max_items is not None:
         items = items[-max_items:]

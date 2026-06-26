@@ -83,3 +83,15 @@ class ConversationState:
     @property
     def messages(self) -> list[Message]:
         return [item for item in self.items if isinstance(item, Message)]
+
+    def items_since(self, item_id: str) -> list[ConversationItem]:
+        start_index = next(
+            (
+                index + 1
+                for index, item in enumerate(self.items)
+                if item.id == item_id
+            ),
+            0,
+        )
+
+        return self.items[start_index:]
