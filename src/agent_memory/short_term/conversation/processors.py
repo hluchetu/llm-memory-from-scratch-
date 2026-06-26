@@ -293,13 +293,30 @@ class SummarizeOldMessagesProcessor:
     def __init__(
         self,
         model: ChatModel,
-        trigger_message_count: int,
         keep_recent_messages: int,
+        trigger_token_count: int | None = None,
+        token_counter: TokenCounter | None = None,
+        trigger_message_count: int | None = None,
         retry: RetryConfig | None = None,
     ) -> None:
-        if trigger_message_count <= 0:
+        if trigger_token_count is None and trigger_message_count is None:
+            raise InvalidProcessorConfigError(
+                "trigger_token_count must be provided."
+            )
+
+        if trigger_token_count is not None and trigger_token_count <= 0:
+            raise InvalidProcessorConfigError(
+                "trigger_token_count must be greater than 0."
+            )
+
+        if trigger_message_count is not None and trigger_message_count <= 0:
             raise InvalidProcessorConfigError(
                 "trigger_message_count must be greater than 0."
+            )
+
+        if trigger_token_count is not None and token_counter is None:
+            raise InvalidProcessorConfigError(
+                "token_counter must be provided when trigger_token_count is used."
             )
 
         if keep_recent_messages <= 0:
@@ -307,12 +324,17 @@ class SummarizeOldMessagesProcessor:
                 "keep_recent_messages must be greater than 0."
             )
 
-        if keep_recent_messages >= trigger_message_count:
+        if (
+            trigger_message_count is not None
+            and keep_recent_messages >= trigger_message_count
+        ):
             raise InvalidProcessorConfigError(
                 "keep_recent_messages must be smaller than trigger_message_count."
             )
 
         self._model = model
+        self._trigger_token_count = trigger_token_count
+        self._token_counter = token_counter
         self._trigger_message_count = trigger_message_count
         self._keep_recent_messages = keep_recent_messages
         self._retry = retry or RetryConfig()
@@ -322,7 +344,7 @@ class SummarizeOldMessagesProcessor:
         messages: list[Message],
         context: ProcessingContext,
     ) -> list[Message]:
-        if len(messages) < self._trigger_message_count:
+        if not self._should_summarize(messages):
             return messages
 
         old_messages = messages[: -self._keep_recent_messages]
@@ -345,6 +367,27 @@ class SummarizeOldMessagesProcessor:
             summary_message,
             *recent_messages,
         ]
+
+    def _should_summarize(self, messages: list[Message]) -> bool:
+        if len(messages) <= self._keep_recent_messages:
+            return False
+
+        if self._trigger_token_count is not None:
+            return self._count_messages(messages) > self._trigger_token_count
+
+        if self._trigger_message_count is None:
+            return False
+
+        return len(messages) >= self._trigger_message_count
+
+    def _count_messages(self, messages: list[Message]) -> int:
+        if self._token_counter is None:
+            return 0
+
+        return sum(
+            self._token_counter.count_message(message)
+            for message in messages
+        )
 
     def _summarize(self, messages: list[Message]) -> str:
         prompt = load_prompt(
