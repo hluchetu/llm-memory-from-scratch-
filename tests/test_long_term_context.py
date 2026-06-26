@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_memory.context.formatters import BulletListFormatter
+from agent_memory.context.formatters import XMLBlockFormatter
 from agent_memory.context.interface import MemoryContextRequest
 from agent_memory.context.long_term import LongTermMemoryContextBuilder
 from agent_memory.context.long_term import format_grouped_records
@@ -83,3 +85,58 @@ def test_long_term_context_builder_uses_custom_type_headings() -> None:
         ]
     )
     assert result.record_ids == ["fact"]
+
+
+def test_long_term_context_builder_uses_custom_formatter() -> None:
+    storage = InMemoryStorage()
+    store = MemoryStore(storage=storage, retrievers=[LexicalMemoryRetriever()])
+    namespace = ("user", "default")
+    store.put(
+        KnowledgeMemory(
+            id="fact",
+            namespace=namespace,
+            key="timezone",
+            content="User works in the Africa/Nairobi timezone.",
+        )
+    )
+    builder = LongTermMemoryContextBuilder(
+        memory_store=store,
+        formatter=BulletListFormatter(heading="Memory"),
+    )
+
+    result = builder.build(
+        MemoryContextRequest(namespace=namespace, query="timezone")
+    )
+
+    assert result.content == "\n".join(
+        [
+            "Memory:",
+            "- User works in the Africa/Nairobi timezone.",
+        ]
+    )
+
+
+def test_xml_block_formatter_escapes_record_content() -> None:
+    formatter = XMLBlockFormatter()
+    content = formatter.format(
+        [
+            KnowledgeMemory(
+                id="fact",
+                namespace=("user", "default"),
+                key="language",
+                content="User likes Python & TypeScript.",
+            )
+        ]
+    )
+
+    assert content == "\n".join(
+        [
+            "<memory>",
+            (
+                '  <item id="fact" type="semantic" key="language">'
+                "User likes Python &amp; TypeScript."
+                "</item>"
+            ),
+            "</memory>",
+        ]
+    )

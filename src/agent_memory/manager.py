@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agent_memory.context.formatters import format_grouped_records
 from agent_memory.context.interface import MemoryContextResult
-from agent_memory.context.long_term import format_grouped_records
 from agent_memory.extraction.interface import MemoryExtractionRequest
 from agent_memory.extraction.interface import MemoryExtractionResult
 from agent_memory.extraction.llm import LLMMemoryExtractor
