@@ -67,7 +67,7 @@ class KeepWithinTokenBudgetProcessor:
 
         if used_tokens > self._max_tokens:
             raise ContextBudgetExceededError(
-                "Preserved system messages exceed the token budget."
+                "Preserved messages exceed the token budget."
             )
 
         selected_units: list[list[Message]] = []
@@ -93,29 +93,50 @@ class KeepWithinTokenBudgetProcessor:
             for message in unit
         ]
 
+        selected_ids = {
+            message.id
+            for message in [
+                *preserved_messages,
+                *selected_messages,
+            ]
+        }
+
         return [
-            *preserved_messages,
-            *selected_messages,
+            message
+            for message in messages
+            if message.id in selected_ids
         ]
 
     def _split_preserved_messages(
         self,
         messages: list[Message],
     ) -> tuple[list[Message], list[Message]]:
-        if not self._preserve_system_messages:
-            return [], messages
-
+        preserved_ids: set[str] = set()
         preserved_messages: list[Message] = []
+
         candidate_index = 0
 
+        if self._preserve_system_messages:
+            for message in messages:
+                if message.role != "system":
+                    break
+
+                preserved_messages.append(message)
+                preserved_ids.add(message.id)
+                candidate_index += 1
+
         for message in messages:
-            if message.role != "system":
-                break
+            if message.pinned and message.id not in preserved_ids:
+                preserved_messages.append(message)
+                preserved_ids.add(message.id)
 
-            preserved_messages.append(message)
-            candidate_index += 1
+        candidate_messages = [
+            message
+            for message in messages[candidate_index:]
+            if message.id not in preserved_ids
+        ]
 
-        return preserved_messages, messages[candidate_index:]
+        return preserved_messages, candidate_messages
 
     def _group_message_units(
         self,
@@ -157,7 +178,7 @@ class FilterByRoleProcessor:
         return [
             message
             for message in messages
-            if message.role in self._allowed_roles
+            if message.pinned or message.role in self._allowed_roles
         ]
 
 
@@ -199,7 +220,7 @@ class CompactToolInteractionsProcessor:
         processed_messages: list[Message] = []
 
         for index, unit in enumerate(units):
-            if index in compact_unit_indexes:
+            if index in compact_unit_indexes and not self._has_pinned_message(unit):
                 processed_messages.append(self._compact_unit(unit))
                 continue
 
@@ -233,6 +254,9 @@ class CompactToolInteractionsProcessor:
 
     def _starts_tool_interaction(self, message: Message) -> bool:
         return message.role == "assistant" and bool(message.tool_calls)
+
+    def _has_pinned_message(self, unit: list[Message]) -> bool:
+        return any(message.pinned for message in unit)
 
     def _compact_unit(self, unit: list[Message]) -> Message:
         assistant_message = unit[0]
@@ -349,21 +373,58 @@ class SummarizeOldMessagesProcessor:
 
         old_messages = messages[: -self._keep_recent_messages]
         recent_messages = messages[-self._keep_recent_messages :]
-        summary = self._summarize(old_messages)
+        previous_summary_index = self._latest_summary_index(old_messages)
+        previous_summary = (
+            old_messages[previous_summary_index]
+            if previous_summary_index is not None
+            else None
+        )
+        candidate_messages = (
+            old_messages[previous_summary_index + 1 :]
+            if previous_summary_index is not None
+            else old_messages
+        )
+        pinned_old_messages = [
+            message
+            for message in old_messages
+            if message.pinned and message is not previous_summary
+        ]
+        summarizable_messages = [
+            message
+            for message in candidate_messages
+            if not message.pinned and not self._is_summary_message(message)
+        ]
 
+        if not summarizable_messages:
+            carried_messages = (
+                [previous_summary]
+                if previous_summary is not None
+                else []
+            )
+            return [
+                *pinned_old_messages,
+                *carried_messages,
+                *recent_messages,
+            ]
+
+        summary = self._summarize(summarizable_messages)
         summary_message = Message(
             role="system",
-            content=f"Conversation summary so far:\n{summary}",
+            content=self._build_summary_content(
+                previous_summary=previous_summary,
+                new_summary=summary,
+            ),
             metadata={
                 "kind": "conversation_summary",
-                "covered_item_ids": [
-                    message.id
-                    for message in old_messages
-                ],
+                "covered_item_ids": self._build_covered_item_ids(
+                    previous_summary=previous_summary,
+                    summarized_messages=summarizable_messages,
+                ),
             },
         )
 
         return [
+            *pinned_old_messages,
             summary_message,
             *recent_messages,
         ]
@@ -379,6 +440,60 @@ class SummarizeOldMessagesProcessor:
             return False
 
         return len(messages) >= self._trigger_message_count
+
+    def _latest_summary_index(
+        self,
+        messages: list[Message],
+    ) -> int | None:
+        for index in range(len(messages) - 1, -1, -1):
+            if self._is_summary_message(messages[index]):
+                return index
+
+        return None
+
+    def _is_summary_message(self, message: Message) -> bool:
+        return message.metadata.get("kind") == "conversation_summary"
+
+    def _build_summary_content(
+        self,
+        previous_summary: Message | None,
+        new_summary: str,
+    ) -> str:
+        summary_parts = []
+
+        if previous_summary is not None:
+            summary_parts.append(self._summary_body(previous_summary))
+
+        summary_parts.append(new_summary)
+
+        return "Conversation summary so far:\n" + "\n".join(summary_parts)
+
+    def _summary_body(self, message: Message) -> str:
+        prefix = "Conversation summary so far:\n"
+
+        if message.content.startswith(prefix):
+            return message.content[len(prefix) :].strip()
+
+        return message.content.strip()
+
+    def _build_covered_item_ids(
+        self,
+        previous_summary: Message | None,
+        summarized_messages: list[Message],
+    ) -> list[str]:
+        covered_item_ids = []
+
+        if previous_summary is not None:
+            raw_covered_item_ids = previous_summary.metadata.get("covered_item_ids", [])
+
+            if isinstance(raw_covered_item_ids, list):
+                covered_item_ids.extend(str(item_id) for item_id in raw_covered_item_ids)
+            else:
+                covered_item_ids.append(previous_summary.id)
+
+        covered_item_ids.extend(message.id for message in summarized_messages)
+
+        return covered_item_ids
 
     def _count_messages(self, messages: list[Message]) -> int:
         if self._token_counter is None:

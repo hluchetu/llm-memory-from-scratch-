@@ -156,7 +156,10 @@ class SQLiteStorage:
             run_id = item.run_id
             model_name = item.model_name
             usage = item.usage or {}
-            metadata = item.metadata
+            metadata = {
+                **item.metadata,
+                "__pinned": item.pinned,
+            }
         elif isinstance(item, SummaryItem):
             item_type = "summary"
             role = None
@@ -167,6 +170,7 @@ class SQLiteStorage:
             metadata = {
                 "metadata": item.metadata,
                 "covered_item_ids": item.covered_item_ids,
+                "pinned": item.pinned,
             }
         else:
             item_type = getattr(item, "item_type", "unknown")
@@ -175,7 +179,10 @@ class SQLiteStorage:
             run_id = None
             model_name = None
             usage = {}
-            metadata = item.metadata
+            metadata = {
+                **item.metadata,
+                "__pinned": item.pinned,
+            }
 
         connection.execute(
             """
@@ -218,18 +225,23 @@ class SQLiteStorage:
                 content=row["content"],
                 created_at=datetime.fromisoformat(row["created_at"]),
                 covered_item_ids=metadata.get("covered_item_ids", []),
+                pinned=bool(metadata.get("pinned", False)),
                 metadata=metadata.get("metadata", {}),
             )
+
+        item_metadata = dict(metadata)
+        pinned = bool(item_metadata.pop("__pinned", False))
 
         return Message(
             id=row["id"],
             role=row["role"],
             content=row["content"],
             created_at=datetime.fromisoformat(row["created_at"]),
+            pinned=pinned,
             run_id=row["run_id"],
             model_name=row["model_name"],
             usage=json.loads(row["usage"]),
-            metadata=metadata,
+            metadata=item_metadata,
         )
 
     def _create_tables(self) -> None:

@@ -29,6 +29,7 @@ def new_item_id() -> str:
 class ConversationItem:
     id: str = field(default_factory=new_item_id)
     created_at: datetime = field(default_factory=utc_now)
+    pinned: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -101,6 +101,7 @@ class MarkdownStorage:
             f"id: {message.id}",
             f"role: {message.role}",
             f"created_at: {message.created_at.isoformat()}",
+            f"pinned: {json.dumps(message.pinned)}",
             f"run_id: {message.run_id or ''}",
             f"model_name: {message.model_name or ''}",
             f"usage: {json.dumps(message.usage or {})}",
@@ -116,6 +117,7 @@ class MarkdownStorage:
             "",
             f"id: {summary.id}",
             f"created_at: {summary.created_at.isoformat()}",
+            f"pinned: {json.dumps(summary.pinned)}",
             f"covered_item_ids: {json.dumps(summary.covered_item_ids)}",
             f"metadata: {json.dumps(summary.metadata)}",
             "",
@@ -155,6 +157,7 @@ class MarkdownStorage:
         created_at = metadata.get("created_at")
         run_id = metadata.get("run_id") or None
         model_name = metadata.get("model_name") or None
+        pinned = json.loads(metadata.get("pinned", "false"))
         usage = json.loads(metadata.get("usage", "{}"))
         message_metadata = json.loads(metadata.get("metadata", "{}"))
 
@@ -166,6 +169,7 @@ class MarkdownStorage:
             role=role,  # type: ignore[arg-type]
             content=message_content.strip(),
             created_at=datetime.fromisoformat(created_at),
+            pinned=pinned,
             run_id=run_id,
             model_name=model_name,
             usage=usage,
@@ -183,6 +187,7 @@ class MarkdownStorage:
 
         summary_id = metadata.get("id")
         created_at = metadata.get("created_at")
+        pinned = json.loads(metadata.get("pinned", "false"))
         covered_item_ids = json.loads(metadata.get("covered_item_ids", "[]"))
         summary_metadata = json.loads(metadata.get("metadata", "{}"))
 
@@ -193,6 +198,7 @@ class MarkdownStorage:
             id=summary_id,
             content=summary_content.strip(),
             created_at=datetime.fromisoformat(created_at),
+            pinned=pinned,
             covered_item_ids=covered_item_ids,
             metadata=summary_metadata,
         )

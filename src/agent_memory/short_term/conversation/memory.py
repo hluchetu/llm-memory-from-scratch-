@@ -30,6 +30,7 @@ class ConversationMemory:
         run_id: str | None = None,
         model_name: str | None = None,
         usage: dict[str, int] | None = None,
+        pinned: bool = False,
         metadata: dict[str, object] | None = None,
     ) -> Message:
         message = Message(
@@ -38,6 +39,7 @@ class ConversationMemory:
             run_id=run_id,
             model_name=model_name,
             usage=usage,
+            pinned=pinned,
             metadata=metadata or {},
         )
 
@@ -53,11 +55,13 @@ class ConversationMemory:
         thread_id: str,
         content: str,
         covered_item_ids: list[str],
+        pinned: bool = False,
         metadata: dict[str, object] | None = None,
     ) -> SummaryItem:
         summary = SummaryItem(
             content=content,
             covered_item_ids=covered_item_ids,
+            pinned=pinned,
             metadata=metadata or {},
         )
 

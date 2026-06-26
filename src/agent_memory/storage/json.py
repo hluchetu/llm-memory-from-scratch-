@@ -114,6 +114,7 @@ class JsonStorage:
                 "role": item.role,
                 "content": item.content,
                 "created_at": item.created_at.isoformat(),
+                "pinned": item.pinned,
                 "run_id": item.run_id,
                 "model_name": item.model_name,
                 "usage": item.usage,
@@ -126,6 +127,7 @@ class JsonStorage:
                 "id": item.id,
                 "content": item.content,
                 "created_at": item.created_at.isoformat(),
+                "pinned": item.pinned,
                 "covered_item_ids": item.covered_item_ids,
                 "metadata": item.metadata,
             }
@@ -134,6 +136,7 @@ class JsonStorage:
             "item_type": getattr(item, "item_type", "unknown"),
             "id": item.id,
             "created_at": item.created_at.isoformat(),
+            "pinned": item.pinned,
             "metadata": item.metadata,
         }
 
@@ -145,6 +148,7 @@ class JsonStorage:
                 id=raw_item["id"],
                 content=raw_item["content"],
                 created_at=datetime.fromisoformat(raw_item["created_at"]),
+                pinned=bool(raw_item.get("pinned", False)),
                 covered_item_ids=raw_item.get("covered_item_ids", []),
                 metadata=raw_item.get("metadata", {}),
             )
@@ -154,6 +158,7 @@ class JsonStorage:
             role=raw_item["role"],
             content=raw_item["content"],
             created_at=datetime.fromisoformat(raw_item["created_at"]),
+            pinned=bool(raw_item.get("pinned", False)),
             run_id=raw_item.get("run_id"),
             model_name=raw_item.get("model_name"),
             usage=raw_item.get("usage"),
