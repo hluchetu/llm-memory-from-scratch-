@@ -12,3 +12,4 @@ venv/
 
 .memory/
 IMPROVEMENTS.md
+docs/async_core_operations_design.md

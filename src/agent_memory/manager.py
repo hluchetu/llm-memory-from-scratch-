@@ -11,6 +11,7 @@ from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.store import MemoryStore
 from agent_memory.reflection import MemoryReflector
 from agent_memory.short_term.conversation.state import ConversationState
+from agent_memory.utils.asyncio import run_sync
 
 
 @dataclass
@@ -44,7 +45,9 @@ class MemoryManager:
         records: list[LongTermRecord] = []
 
         for config in self._stores:
-            for record in config.store.search(namespace=namespace, query=query, limit=limit):
+            for record in config.store.search(
+                namespace=namespace, query=query, limit=limit
+            ):
                 if record.id not in seen_ids:
                     seen_ids.add(record.id)
                     records.append(record)
@@ -58,6 +61,19 @@ class MemoryManager:
                 heading="Relevant memory",
             ),
             record_ids=[record.id for record in records[:limit]],
+        )
+
+    async def inject_async(
+        self,
+        query: str,
+        namespace: tuple[str, ...],
+        limit: int = 5,
+    ) -> MemoryContextResult:
+        return await run_sync(
+            self.inject,
+            query=query,
+            namespace=namespace,
+            limit=limit,
         )
 
     def extract(
@@ -100,6 +116,19 @@ class MemoryManager:
 
         return result
 
+    async def extract_async(
+        self,
+        conversation: ConversationState,
+        namespace: tuple[str, ...],
+        since_item_id: str | None = None,
+    ) -> MemoryExtractionResult:
+        return await run_sync(
+            self.extract,
+            conversation=conversation,
+            namespace=namespace,
+            since_item_id=since_item_id,
+        )
+
     def search(
         self,
         query: str,
@@ -120,12 +149,29 @@ class MemoryManager:
         records: list[LongTermRecord] = []
 
         for config in self._stores:
-            for record in config.store.search(namespace=namespace, query=query, limit=limit):
+            for record in config.store.search(
+                namespace=namespace, query=query, limit=limit
+            ):
                 if record.id not in seen_ids:
                     seen_ids.add(record.id)
                     records.append(record)
 
         return records[:limit]
+
+    async def search_async(
+        self,
+        query: str,
+        namespace: tuple[str, ...],
+        store_name: str | None = None,
+        limit: int = 5,
+    ) -> list[LongTermRecord]:
+        return await run_sync(
+            self.search,
+            query=query,
+            namespace=namespace,
+            store_name=store_name,
+            limit=limit,
+        )
 
     @property
     def store_descriptions(self) -> dict[str, str]:

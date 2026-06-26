@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
@@ -13,6 +12,8 @@ from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.semantic import KnowledgeMemory
 from agent_memory.long_term.store import MemoryStore
 from agent_memory.prompts.loader import load_prompt
+from agent_memory.utils.asyncio import run_sync
+from agent_memory.utils.json import parse_json_object
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,6 +49,13 @@ class MemoryReflector:
         self._pending_importance_sum = 0.0
         return result
 
+    async def observe_async(
+        self,
+        records: list[LongTermRecord],
+        namespace: tuple[str, ...],
+    ) -> ReflectionResult | None:
+        return await run_sync(self.observe, records, namespace)
+
     def should_reflect(self) -> bool:
         return (
             self._pending_record_count >= self.reflection_interval
@@ -82,7 +90,10 @@ class MemoryReflector:
         ]
         response = self.model.invoke(messages)
         records = build_reflection_records(
-            payload=parse_json_object(response.content),
+            payload=parse_json_object(
+                response.content,
+                error_message="Memory reflection response must be a JSON object.",
+            ),
             namespace=namespace,
             source_records=source_records,
         )
@@ -101,6 +112,12 @@ class MemoryReflector:
             records=records,
             source_record_ids=[record.id for record in source_records],
         )
+
+    async def reflect_async(
+        self,
+        namespace: tuple[str, ...],
+    ) -> ReflectionResult:
+        return await run_sync(self.reflect, namespace)
 
 
 def select_reflection_sources(
@@ -187,22 +204,6 @@ def build_reflection_records(
         )
 
     return records
-
-
-def parse_json_object(text: str) -> dict[str, Any]:
-    stripped = text.strip()
-
-    if stripped.startswith("```json"):
-        stripped = stripped.removeprefix("```json").removesuffix("```").strip()
-    elif stripped.startswith("```"):
-        stripped = stripped.removeprefix("```").removesuffix("```").strip()
-
-    payload = json.loads(stripped)
-
-    if not isinstance(payload, dict):
-        raise ValueError("Memory reflection response must be a JSON object.")
-
-    return payload
 
 
 def optional_string(value: Any) -> str | None:

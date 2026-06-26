@@ -10,6 +10,7 @@ from agent_memory.long_term.procedural import WorkflowMemory
 from agent_memory.long_term.semantic import EntityMemory
 from agent_memory.long_term.semantic import KnowledgeMemory
 from agent_memory.long_term.store import MemoryStore
+from agent_memory.utils.asyncio import run_sync
 
 
 DEFAULT_TYPE_HEADINGS = {
@@ -59,6 +60,12 @@ class LongTermMemoryContextBuilder:
             ),
             record_ids=[record.id for record in records],
         )
+
+    async def build_async(
+        self,
+        request: MemoryContextRequest,
+    ) -> MemoryContextResult:
+        return await run_sync(self.build, request)
 
 
 def format_grouped_records(

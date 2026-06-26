@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import datetime
-from datetime import timezone
 from typing import Any
 from typing import ClassVar
 from typing import Literal
 from uuid import uuid4
+
+from agent_memory.utils.time import utc_now
 
 
 MemoryType = Literal[
@@ -22,10 +23,6 @@ MemoryType = Literal[
 
 def new_memory_id() -> str:
     return str(uuid4())
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -13,6 +13,7 @@ from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import MetadataFilter
 from agent_memory.long_term.storage import MemoryStorage
 from agent_memory.long_term.text import searchable_text
+from agent_memory.utils.asyncio import run_sync
 
 
 class MemoryStore:
@@ -35,12 +36,22 @@ class MemoryStore:
         for retriever in self._retrievers:
             retriever.add(record)
 
+    async def put_async(self, record: LongTermRecord) -> None:
+        return await run_sync(self.put, record)
+
     def get(
         self,
         namespace: tuple[str, ...],
         key: str,
     ) -> LongTermRecord | None:
         return self._storage.get(namespace, key)
+
+    async def get_async(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> LongTermRecord | None:
+        return await run_sync(self.get, namespace, key)
 
     def list(
         self,
@@ -49,6 +60,19 @@ class MemoryStore:
         include_invalidated: bool = False,
     ) -> list[LongTermRecord]:
         return self._storage.list(
+            namespace=namespace,
+            memory_type=memory_type,
+            include_invalidated=include_invalidated,
+        )
+
+    async def list_async(
+        self,
+        namespace: tuple[str, ...],
+        memory_type: MemoryType | None = None,
+        include_invalidated: bool = False,
+    ) -> list[LongTermRecord]:
+        return await run_sync(
+            self.list,
             namespace=namespace,
             memory_type=memory_type,
             include_invalidated=include_invalidated,
@@ -86,6 +110,23 @@ class MemoryStore:
 
         return self._storage.get_many(record_ids)
 
+    async def search_async(
+        self,
+        namespace: tuple[str, ...],
+        query: str,
+        memory_type: MemoryType | None = None,
+        limit: int = 5,
+        metadata: MetadataFilter | None = None,
+    ) -> list[LongTermRecord]:
+        return await run_sync(
+            self.search,
+            namespace=namespace,
+            query=query,
+            memory_type=memory_type,
+            limit=limit,
+            metadata=metadata,
+        )
+
     def invalidate(
         self,
         namespace: tuple[str, ...],
@@ -107,6 +148,13 @@ class MemoryStore:
 
         return True
 
+    async def invalidate_async(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> bool:
+        return await run_sync(self.invalidate, namespace, key)
+
     def delete(
         self,
         namespace: tuple[str, ...],
@@ -121,6 +169,13 @@ class MemoryStore:
 
         for retriever in self._retrievers:
             retriever.delete(record.id)
+
+    async def delete_async(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+    ) -> None:
+        return await run_sync(self.delete, namespace, key)
 
     def _invalidate_conflicts(self, record: LongTermRecord) -> None:
         candidates = self._storage.list(

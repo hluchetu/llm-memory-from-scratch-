@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any
 
@@ -30,6 +29,8 @@ from agent_memory.short_term.conversation.state import RetrievalItem
 from agent_memory.short_term.conversation.state import SummaryItem
 from agent_memory.short_term.conversation.state import ToolCall
 from agent_memory.short_term.conversation.state import ToolResult
+from agent_memory.utils.asyncio import run_sync
+from agent_memory.utils.json import parse_json_object
 
 
 class LLMMemoryExtractor:
@@ -91,7 +92,10 @@ class LLMMemoryExtractor:
                 config=self._retry,
                 is_transient=is_transient_llm_error,
             )
-            payload = parse_json_object(response.content)
+            payload = parse_json_object(
+                response.content,
+                error_message="Memory extraction response must be a JSON object.",
+            )
             records, invalidated_keys = build_records(
                 payload=payload,
                 namespace=request.namespace,
@@ -114,6 +118,12 @@ class LLMMemoryExtractor:
             invalidated_keys=invalidated_keys,
             source_item_ids=source_item_ids,
         )
+
+    async def extract_async(
+        self,
+        request: MemoryExtractionRequest,
+    ) -> MemoryExtractionResult:
+        return await run_sync(self.extract, request)
 
 
 def select_items(
@@ -169,22 +179,6 @@ def format_item(item: ConversationItem) -> str:
         return f"[{item.id}] summary: {item.content}"
 
     return f"[{item.id}] item: {item}"
-
-
-def parse_json_object(text: str) -> dict[str, Any]:
-    stripped = text.strip()
-
-    if stripped.startswith("```json"):
-        stripped = stripped.removeprefix("```json").removesuffix("```").strip()
-    elif stripped.startswith("```"):
-        stripped = stripped.removeprefix("```").removesuffix("```").strip()
-
-    payload = json.loads(stripped)
-
-    if not isinstance(payload, dict):
-        raise ValueError("Memory extraction response must be a JSON object.")
-
-    return payload
 
 
 def build_records(
