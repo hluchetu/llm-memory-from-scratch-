@@ -4,6 +4,9 @@ from agent_memory.long_term.decision import DecisionMemory
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
 from agent_memory.long_term.preference import PreferenceMemory
+from agent_memory.long_term.policy import AllowAllNamespacePolicy
+from agent_memory.long_term.policy import NamespacePolicy
+from agent_memory.long_term.policy import NamespacePrefixPolicy
 from agent_memory.long_term.search import MemorySearch
 from agent_memory.long_term.search import MetadataFilter
 from agent_memory.long_term.search import RetrievalResult
@@ -23,6 +26,9 @@ __all__ = [
     "MemoryStore",
     "MemoryType",
     "MetadataFilter",
+    "AllowAllNamespacePolicy",
+    "NamespacePolicy",
+    "NamespacePrefixPolicy",
     "PreferenceMemory",
     "RetrievalResult",
     "SQLiteMemoryStorage",

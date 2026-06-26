@@ -28,3 +28,7 @@ class ContextBudgetExceededError(LLMMemoryError):
 
 class StorageError(LLMMemoryError):
     """Raised when conversation state cannot be persisted or loaded."""
+
+
+class NamespaceAccessError(PermissionError, LLMMemoryError):
+    """Raised when a namespace policy rejects a memory operation."""

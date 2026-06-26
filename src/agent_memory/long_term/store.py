@@ -4,9 +4,12 @@ from dataclasses import replace
 from datetime import datetime
 from datetime import timezone
 
+from agent_memory.errors import NamespaceAccessError
 from agent_memory.long_term.conflicts import find_conflicting_records
 from agent_memory.long_term.item import LongTermRecord
 from agent_memory.long_term.item import MemoryType
+from agent_memory.long_term.policy import AllowAllNamespacePolicy
+from agent_memory.long_term.policy import NamespacePolicy
 from agent_memory.long_term.ranking import reciprocal_rank_score
 from agent_memory.long_term.retriever import MemoryRetriever
 from agent_memory.long_term.search import MemorySearch
@@ -22,12 +25,15 @@ class MemoryStore:
         storage: MemoryStorage,
         retrievers: list[MemoryRetriever] | None = None,
         max_related_ids: int = 3,
+        namespace_policy: NamespacePolicy | None = None,
     ) -> None:
         self._storage = storage
         self._retrievers = retrievers or []
         self._max_related_ids = max_related_ids
+        self._namespace_policy = namespace_policy or AllowAllNamespacePolicy()
 
     def put(self, record: LongTermRecord) -> None:
+        self._enforce_write(record.namespace)
         self._invalidate_conflicts(record)
         record = self._with_related_ids(record)
         self._storage.put(record)
@@ -44,6 +50,7 @@ class MemoryStore:
         namespace: tuple[str, ...],
         key: str,
     ) -> LongTermRecord | None:
+        self._enforce_read(namespace)
         return self._storage.get(namespace, key)
 
     async def get_async(
@@ -59,6 +66,7 @@ class MemoryStore:
         memory_type: MemoryType | None = None,
         include_invalidated: bool = False,
     ) -> list[LongTermRecord]:
+        self._enforce_read(namespace)
         return self._storage.list(
             namespace=namespace,
             memory_type=memory_type,
@@ -79,6 +87,23 @@ class MemoryStore:
         )
 
     def search(
+        self,
+        namespace: tuple[str, ...],
+        query: str,
+        memory_type: MemoryType | None = None,
+        limit: int = 5,
+        metadata: MetadataFilter | None = None,
+    ) -> list[LongTermRecord]:
+        self._enforce_read(namespace)
+        return self._search_records(
+            namespace=namespace,
+            query=query,
+            memory_type=memory_type,
+            limit=limit,
+            metadata=metadata,
+        )
+
+    def _search_records(
         self,
         namespace: tuple[str, ...],
         query: str,
@@ -132,6 +157,7 @@ class MemoryStore:
         namespace: tuple[str, ...],
         key: str,
     ) -> bool:
+        self._enforce_write(namespace)
         record = self._storage.get(namespace, key)
 
         if record is None or record.invalidated_at is not None:
@@ -160,6 +186,7 @@ class MemoryStore:
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        self._enforce_write(namespace)
         record = self._storage.get(namespace, key)
 
         self._storage.delete(namespace, key)
@@ -203,7 +230,7 @@ class MemoryStore:
             if related_id != record.id
         ]
 
-        for related_record in self.search(
+        for related_record in self._search_records(
             namespace=record.namespace,
             query=searchable_text(record),
             limit=self._max_related_ids,
@@ -244,3 +271,23 @@ class MemoryStore:
                     )[: self._max_related_ids],
                 )
             )
+
+    def _enforce_read(self, namespace: tuple[str, ...]) -> None:
+        if self._namespace_policy.can_read(namespace):
+            return
+
+        raise NamespaceAccessError(
+            f"Read access denied for namespace: {format_namespace(namespace)}"
+        )
+
+    def _enforce_write(self, namespace: tuple[str, ...]) -> None:
+        if self._namespace_policy.can_write(namespace):
+            return
+
+        raise NamespaceAccessError(
+            f"Write access denied for namespace: {format_namespace(namespace)}"
+        )
+
+
+def format_namespace(namespace: tuple[str, ...]) -> str:
+    return "/".join(namespace)
