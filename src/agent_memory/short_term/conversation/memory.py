@@ -77,6 +77,13 @@ class ConversationMemory:
 
         return list(state.items)
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        return self._storage.get_items_since(thread_id, item_id)
+
     def get_messages(self, thread_id: str) -> list[Message]:
         state = self.get_thread(thread_id)
 

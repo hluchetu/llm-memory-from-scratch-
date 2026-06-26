@@ -44,6 +44,27 @@ class CachedConversationStorage:
         self._primary.append_item(thread_id, item)
         self._cache.append_item(thread_id, item)
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        cached_state = self._cache.get(thread_id)
+
+        if cached_state is not None:
+            return cached_state.items_since(item_id)
+
+        items = self._primary.get_items_since(thread_id, item_id)
+        primary_state = self._primary.get(thread_id)
+
+        if primary_state is not None:
+            self._cache.replace_items(
+                thread_id=thread_id,
+                items=primary_state.items,
+            )
+
+        return items
+
     def replace_items(
         self,
         thread_id: str,

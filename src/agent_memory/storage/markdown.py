@@ -54,6 +54,18 @@ class MarkdownStorage:
         state.items.append(item)
         self.save(state)
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        state = self.get(thread_id)
+
+        if state is None:
+            return []
+
+        return state.items_since(item_id)
+
     def replace_items(
         self,
         thread_id: str,

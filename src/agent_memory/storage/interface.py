@@ -20,6 +20,13 @@ class ConversationStorage(Protocol):
     def append_item(self, thread_id: str, item: ConversationItem) -> None:
         ...
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        ...
+
     def replace_items(
         self,
         thread_id: str,

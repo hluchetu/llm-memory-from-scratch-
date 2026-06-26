@@ -25,6 +25,18 @@ class MemoryStorage:
         self.create_thread(thread_id)
         self._states[thread_id].items.append(item)
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        state = self.get(thread_id)
+
+        if state is None:
+            return []
+
+        return state.items_since(item_id)
+
     def replace_items(
         self,
         thread_id: str,

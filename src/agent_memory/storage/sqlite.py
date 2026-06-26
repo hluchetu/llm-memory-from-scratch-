@@ -101,6 +101,62 @@ class SQLiteStorage:
 
             self._insert_item(connection, thread_id, position, item)
 
+    def get_items_since(
+        self,
+        thread_id: str,
+        item_id: str,
+    ) -> list[ConversationItem]:
+        with self._connect() as connection:
+            conversation = connection.execute(
+                """
+                SELECT id
+                FROM conversations
+                WHERE id = ?
+                """,
+                (thread_id,),
+            ).fetchone()
+
+            if conversation is None:
+                return []
+
+            anchor = connection.execute(
+                """
+                SELECT position
+                FROM conversation_items
+                WHERE conversation_id = ? AND id = ?
+                """,
+                (thread_id, item_id),
+            ).fetchone()
+
+            if anchor is None:
+                minimum_position = -1
+            else:
+                minimum_position = int(anchor["position"])
+
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    item_type,
+                    role,
+                    content,
+                    created_at,
+                    run_id,
+                    model_name,
+                    usage,
+                    metadata
+                FROM conversation_items
+                WHERE conversation_id = ? AND position > ?
+                ORDER BY position ASC
+                """,
+                (thread_id, minimum_position),
+            ).fetchall()
+
+        return [
+            self._row_to_item(row)
+            for row in rows
+        ]
+
     def replace_items(
         self,
         thread_id: str,
